@@ -1,12 +1,14 @@
-"""RHX8-Q1C authentication cipher implementation.
+"""Login answer for the RHX8-Q1C challenge (78e1 -> 59a0 challenge; 89a1 answer, twice).
 
-The RHX8-Q1C controller uses an RC5-32/12/16 block cipher (32-bit words, 12 rounds,
-16-byte key) with a pre-expanded 26-word subkey table S to authenticate write/upload
-sessions over BLE.
+Interoperability with a controller you own: the answer is computed from YOUR controller password (signboard.config
+"sign_password"); nothing here guesses or bypasses it. The cipher is RC5-32/12 with a fixed key schedule and a fixed
+second-step password that are part of the protocol (identical on every controller), observed in the vendor app's
+traffic and code. With this public, the controller password is the only barrier for anyone within Bluetooth range:
+change the factory default in the RHX app.
 """
 import struct
 
-# Pre-expanded 26-word subkey table S (RC5-32/12/16) from libLED_CP.so .rodata
+# Pre-expanded 26-word RC5-32/12/16 key schedule used by the protocol (the same on every controller)
 SUBKEYS = [
     0x8c546ec0, 0xefc58278, 0xf75565d0, 0x344f5f35, 0xe89b90ae, 0xc0b223a2,
     0x974c46fb, 0x485f5f8c, 0xf3190670, 0xf25eee6c, 0x1f3266c1, 0xfde17066,

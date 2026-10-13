@@ -29,13 +29,18 @@ SCROLL, STILL = 17, 1                    # ShowWay: Up_Continue scrolls a tall p
 def template(mode):
     if mode != 'text' and mode.removeprefix('raw-') not in MODES:
         raise ValueError(f'unknown mode {mode!r}; one of {", ".join(MODES)}')
+    for d in template_dirs():
+        if (d / f'{mode}.bin').is_file():
+            return (d / f'{mode}.bin').read_bytes()
+    raise FileNotFoundError(f'no {mode} template in {", ".join(map(str, template_dirs()))}. Templates come from your '
+                            f'own RHX Plus exports: see docs/templates.md (python -m signboard.import_ledrom FILE)')
+
+
+def template_dirs():
+    """Where templates are looked for: templates_dir (config), <state_dir>/templates, then the package folder."""
     from signboard import config
-    d = Path(config.get('templates_dir')).expanduser() if config.get('templates_dir') else HERE / 'templates'
-    f = d / f'{mode}.bin'
-    if not f.is_file():
-        raise FileNotFoundError(f'no {mode} template in {d}. Templates come from your own RHX Plus exports: '
-                                f'see docs/templates.md (python -m signboard.import_ledrom)')
-    return f.read_bytes()
+    out = [Path(config.get('templates_dir')).expanduser()] if config.get('templates_dir') else []
+    return out + [config.state_dir() / 'templates', HERE / 'templates']
 
 
 def info(mode):
@@ -122,7 +127,10 @@ def build(img, mode, effect=None, speed=2, stop=0, still=False, report=None):
     still=True shows one 32-row frame. Over MAX_UPLOAD the picture is scaled down, then the mode stepped down; what was
     done is appended to `report` (a list) when given."""
     report = [] if report is None else report
-    lower = MODES[MODES.index(mode)::-1]
+    have = installed()
+    lower = [m for m in MODES[MODES.index(mode)::-1] if m in have]
+    if not lower:
+        raise FileNotFoundError(f'no template installed for {mode} or a shallower mode (docs/templates.md)')
     # mild shrinking first, then a shallower mode at full size, then shrink as far as it takes
     tries = [(m, s) for m in lower for s in (1.0, 0.85, 0.72)] + \
             [(m, 0.72 * 0.85 ** k) for m in lower for k in range(1, 12)]
@@ -140,9 +148,23 @@ def build(img, mode, effect=None, speed=2, stop=0, still=False, report=None):
     raise ValueError('picture does not fit the upload limit in any mode')
 
 
+GREY = {'seven-lengthen': 0, 'low-gray': 1, 'middle-gray': 3, 'high-gray': 5, 'true-color': 7}
+
+
+def installed():
+    """Modes whose template is installed (see docs/templates.md)."""
+    out = []
+    for m in MODES:
+        try:
+            template(m); out.append(m)
+        except FileNotFoundError:
+            pass
+    return out
+
+
 def mode_of(img_bytes):
-    """Which mode a picture program was built in (from its grey depth)."""
-    return {info(m)['grey']: m for m in MODES}.get(img_bytes[0x37])
+    """Which mode a picture program was built in (from its grey depth byte; no templates needed)."""
+    return {g: m for m, g in GREY.items()}.get(img_bytes[0x37])
 
 
 def decode(img_bytes):

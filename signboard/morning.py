@@ -1,4 +1,4 @@
-"""Hold the sign dark until a set time, then put a message up, verified by the shelf phone's camera.
+"""Hold the sign dark until a set time, then put a message up, verified by the camera phone.
 
   python -m signboard.morning --at 08:00 --image <program.bin> [--guard-from 07:25]
 
@@ -35,7 +35,7 @@ def today_at(hhmm):
 
 
 def lit(cam, tag):
-    """judge_photo, not crop_sign: in daylight the white wall tiles pass a plain brightness test (at 07:52 and
+    """judge_photo, not crop_sign: in daylight a bright wall can pass a plain brightness test (at 07:52 and
     07:57 on 2026-10-11 the guard re-sent power-off to a dark sign); judge_photo needs saturated or clipped LED pixels."""
     from signboard.verify import judge_photo
     p = cam.take(str(SHOTS / f'{time.strftime("%H%M%S")}-{tag}.jpg'))

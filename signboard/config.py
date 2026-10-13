@@ -12,10 +12,12 @@ DEFAULTS = {
     'sign_address': None,        # BLE address of the RHX controller, e.g. "AA:BB:CC:DD:EE:FF"  # scan:ok
     'sign_password': None,       # the controller ("card") password; set your own in the vendor app first
     'camera_serial': None,       # adb serial (or part of it) of the phone used as a camera; None = first match below
-    'camera_models': [],         # adb `device:` names accepted when camera_serial is unset (e.g. "walleye" = Pixel 2);
+    'camera_models': [],         # adb `device:` names accepted when camera_serial is unset (e.g. "walleye");
                                  # empty: use the only attached adb device
     'state_dir': '~/.signboard',  # signd-photos/, signd-programs/ and signd-*.json state files live here
     'templates_dir': None,       # picture-mode templates imported from your own RHX Plus exports; None = package templates/
+    'sign_name': 'LED Sign',     # shown in the web UI and advertised over mDNS
+    'allowed_hosts': [],         # extra host names signd answers to (it already accepts its LAN address and names)
     'max_brightness': 16,        # upper limit for automatic brightness (auto-light)
     'latitude': None,            # for sunrise/sunset brightness (signd --auto-light); None disables it
     'longitude': None,
@@ -24,7 +26,10 @@ DEFAULTS = {
 
 def _load():
     cfg = dict(DEFAULTS)
-    for p in (os.environ.get('SIGNBOARD_CONFIG'), 'signboard.toml', '~/.signboard.toml'):
+    env = os.environ.get('SIGNBOARD_CONFIG')
+    if env and not Path(env).expanduser().is_file():
+        raise RuntimeError(f'signboard: SIGNBOARD_CONFIG={env} does not exist')
+    for p in ((env,) if env else ('signboard.toml', '~/.signboard.toml')):
         if p and Path(p).expanduser().is_file():
             with open(Path(p).expanduser(), 'rb') as f:
                 cfg.update(tomllib.load(f))
@@ -33,7 +38,8 @@ def _load():
     for k, v in DEFAULTS.items():
         env = os.environ.get('SIGNBOARD_' + k.upper())
         if env is not None:
-            cfg[k] = float(env) if k in ('latitude', 'longitude') else int(env) if k == 'max_brightness' else env
+            cfg[k] = (float(env) if k in ('latitude', 'longitude') else int(env) if k == 'max_brightness'
+                      else [x.strip() for x in env.split(',') if x.strip()] if k in ('camera_models', 'allowed_hosts') else env)
     return cfg
 
 

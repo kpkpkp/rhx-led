@@ -3,12 +3,13 @@
 One persistent GATT link (the controller accepts a single central), reconnected on demand and dropped after an idle
 period so the vendor app can still get in when it is needed. Every operation is serialised by one lock.
 
-  login         78e1 -> 59a0 challenge, 89a1 -> 59a3, 89a1 -> 59a1   (crypto.solve_challenge)
+  login         78e1 (size 0) -> 59a0 challenge, 89a1 -> 59a3, 89a1 -> 59a1   (crypto.solve_challenge)
   power         login, then 08 (on) / 09 (off); reply 88
+  brightness    login, then 0a <0xef + level> 04; reply 88
   read          0e01, ac01 reads, 0e02                                  (no login)
-  upload        login(size), 78e1 again -> 81dc02, dc02 stream (acks 81dc03 every 3000 B), 81dc04, dc04
+  upload        78e1 <size> (login if challenged) -> 81dc02, dc02 stream, 81dc04 verdict, dc04   (see upload())
 
-  python -m signboard.direct status|on|off|read-image OUT|upload IMAGE
+  python -m signboard.direct status|on|off|brightness N|read-image OUT|upload IMAGE   (back up first: read-image)
 """
 import argparse
 import asyncio
@@ -206,13 +207,16 @@ class DirectSign:
     def negotiate(self):
         """ae01: ask for 500-byte packets. The app does this first on every connection."""
         r = self.expect(protocol.frame(0xae, b'\x01\x01\xf4\x01\xf4', tail04=False), b'\xa5\x00\xa5\x00\xae\x01\x88', 5)
-        return struct.unpack_from('>HH', r, 8)          # (500, 500) on BLE 4.2+ hosts; the Moto X got (20, 20)
+        return struct.unpack_from('>HH', r, 8)          # (500, 500) on BLE 4.2+ hosts; an old BLE 4.0 host got (20, 20)
 
     def begin_upload(self, size, password=None):
         """78e1 <size> until the controller accepts *this* size (81dc02 ... <size>).
         78e1 answers either a challenge (59a0: log in, then ask again) or an accept. An accept for another size means
-        an upload is still pending from an earlier 78e1 (the power/brightness login opens one for 100 bytes and it
-        survives reconnects): close it with dc04 and ask again."""
+        an upload is still pending from an earlier 78e1 (a login opens one and it survives reconnects): close it with
+        dc04 and ask again. 78e1 erases the program area, so it waits UPLOAD_SETTLE_S after the previous upload."""
+        settle = UPLOAD_SETTLE_S - (time.time() - self._last_upload)
+        if settle > 0:
+            time.sleep(settle)
         req = protocol.frame(0x78, b'\xe1' + b'\x00' * 4 + struct.pack('>I', size), tail04=False)
         mine = b'\x81\xdc\x02' + b'\x00' * 4 + struct.pack('>I', size)
         for _ in range(4):
@@ -234,50 +238,75 @@ class DirectSign:
 
     def _fast_link(self):
         """Ask Windows for a throughput-optimised connection (Win11 WinRT). 43 KB went from 6.3 s to ~2.7 s
-        together with unacked writes (2026-10-12). Best effort: other backends/OS versions just skip it."""
+        together with unacked writes (2026-10-12). Returns False where unavailable (other OSes, older bleak)."""
         try:
             from winrt.windows.devices.bluetooth import BluetoothLEPreferredConnectionParameters as P
             self._client._backend._requester.request_preferred_connection_parameters(P.throughput_optimized)
+            return True
         except Exception as e:
             self.log('fast link not available:', e)
+            return False
 
-    def upload(self, img: bytes, progress=None, fast=True):
-        """Write a full program image (with the 00 00 00 ff prefix and a valid S1 at the end) to the sign.
-        Same sequence as the app (btsnoop, app 8.0.90): ae01, login, 78e1 <size> -> 81dc02, dc02 stream of 500-byte
-        writes, 81dc04 -> dc04 000004. The controller acks every 3000 B with 81dc03 <offset>. The app uses acked
-        writes; fast=True sends them unacked on a throughput-optimised link (~2.4x) and falls back to acked writes if
-        the controller's checksum verdict in 81dc04 is not 88. The u32 before the size in 78e1/dc02 is not an
-        offset: the controller always writes from address 0 (tested 2026-10-12), so there are no partial uploads."""
+    def _stream(self, packets, unacked, progress):
+        """78e1 already accepted: send the dc02 stream, wait for 81dc04, always close with dc04. Returns the verdict."""
+        self._rx.clear()
+        try:
+            for i, p in enumerate(packets):
+                self.write(p, response=not unacked)
+                if progress:
+                    progress(i + 1, len(packets))
+            try:
+                done = self.wait_for(lambda b: b[b.find(b'\x81\xdc\x04'):] if b'\x81\xdc\x04' in b and len(b) >= b.find(b'\x81\xdc\x04') + 10 else None, 15)
+            except SignError:
+                done = b''
+        finally:
+            try:
+                self.write(protocol.finish_upload())
+            except Exception:
+                pass
+        return done
+
+    def upload(self, img: bytes, progress=None, fast=True, _restoring=False):
+        """Write a full program image (with the 00 00 00 ff prefix) to the sign: ae01, login, 78e1 <size> -> 81dc02,
+        dc02 stream of 500-byte writes, 81dc04 (checksum verdict) -> dc04 000004. fast=True sends the stream unacked on
+        a throughput-optimised link (~2.4x; Windows only, needs MTU >= 503) and falls back to acked writes when the
+        verdict is not 88 or the link drops. 78e1 erases the stored program, so if every attempt fails the last
+        program that uploaded successfully is put back. The u32 before the size in 78e1/dc02 is not an offset: the
+        controller always writes from address 0 (tested 2026-10-12), so there are no partial uploads."""
         from signboard import image
         packets, size = image.wire_stream(img)
         with self.lock:
             self.ensure()
             t0 = time.time()
-            if fast:
-                self._fast_link()
+            fast = fast and self._fast_link() and (getattr(self._client, 'mtu_size', 23) - 3) >= max(map(len, packets))
             self.negotiate()
+            done, err = b'', None
             for unacked in ((True, False) if fast else (False,)):
-                self.begin_upload(size)
-                self._rx.clear()
-                for i, p in enumerate(packets):
-                    self.write(p, response=not unacked)
-                    if progress:
-                        progress(i + 1, len(packets))
                 try:
-                    done = self.wait_for(lambda b: b[b.find(b'\x81\xdc\x04'):] if b'\x81\xdc\x04' in b and len(b) >= b.find(b'\x81\xdc\x04') + 10 else None, 15)
-                except SignError:
-                    done = b''
-                self.write(protocol.finish_upload())
+                    self.ensure()
+                    self.begin_upload(size)
+                    done = self._stream(packets, unacked, progress)
+                    err = None
+                except Exception as e:                   # link dropped mid-stream: reconnect and try the next way
+                    done, err = b'', e
+                    self.log(f'upload attempt failed: {type(e).__name__}: {e}')
+                    self._reset_link()
                 ok = done[6:7] == b'\x88'
                 self.log(f'upload {size} B {"unacked" if unacked else "acked"} in {time.time() - t0:.1f} s; end {done[:11].hex()}')
                 if ok:
                     break
-                if unacked:
-                    self.log('unacked upload not accepted; retrying with acked writes')
-                    time.sleep(0.5)
+                time.sleep(0.5)
             if not ok:
-                raise SignError(f'controller rejected the upload: {done[:11].hex()}')
+                good = getattr(self, '_last_good', None)
+                if good and good != img and not _restoring:
+                    self.log('upload failed: putting the last good program back')
+                    try:
+                        self.upload(good, fast=False, _restoring=True)
+                    except Exception as e:
+                        self.log('restore failed too:', e)
+                raise SignError(f'controller rejected the upload: {done[:11].hex() or err}')
             self._last_upload = time.time()
+            self._last_good = img
             self._remember(True)                     # an upload always wakes the display
             return {'bytes': size, 'seconds': round(time.time() - t0, 1)}
 
@@ -311,7 +340,7 @@ class DirectSign:
             return True
 
     def _reset_link(self):
-        """The 78e1 login leaves a 100-byte upload pending; on the same link the controller then answers everything
+        """The 78e1 login leaves an upload request pending; on the same link the controller then answers everything
         (even ae01) with that stale 81dc02 and uploads stall. A reconnect clears it, so drop the link."""
         time.sleep(0.3)
         if self._client:
@@ -358,6 +387,8 @@ class DirectSign:
             try:
                 head = protocol.read_memory(self.request, 0, 0x76)      # sign address == image offset
                 total = struct.unpack_from('>I', head, 0x11)[0]
+                if not 0x76 <= total <= 1024 * 1024:             # erased flash reads ff..: don't loop over 4 GB
+                    raise SignError(f'no valid program in the sign (length field {total:#x}): upload one first')
                 body = protocol.read_memory(self.request, 4, total)
             finally:
                 self.request(protocol.close_session(), protocol.ACK_LEN)

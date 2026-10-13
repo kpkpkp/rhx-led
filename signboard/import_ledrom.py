@@ -2,7 +2,7 @@
 
 The vendor templates cannot be redistributed, so each user makes their own (docs/templates.md):
 in RHX Plus set Setting -> WorkMode, add a picture, set the screen to the panel size, press "USB drive", then
-  python -m signboard.import_ledrom C:\LedRom            # -> templates/<mode>.bin (or raw-<mode>.bin)
+  python -m signboard.import_ledrom C:\LedRom    # -> <state_dir>/templates/<mode>.bin (or raw-<mode>.bin, text.bin)
 The file is the program image with a 5-byte prefix (00 xx xx 00 ff) and a trailer (timestamp + sums).
 """
 import struct
@@ -25,15 +25,20 @@ def convert(ledrom: bytes) -> bytes:
 
 
 def main():
-    src = Path(sys.argv[1] if len(sys.argv) > 1 else r'C:\LedRom')
-    img = convert(src.read_bytes())
+    import argparse
+    ap = argparse.ArgumentParser(description='Import an RHX Plus "USB drive" export (one file, e.g. C:\LedRom) as a template')
+    ap.add_argument('export', help='the exported file (RHX Plus writes it to C:\LedRom on Windows)')
+    ap.add_argument('--out-dir', help='where to save (default: templates_dir from config, else <state_dir>/templates)')
+    a = ap.parse_args()
+    img = convert(Path(a.export).read_bytes())
     g, B = img[0x37], picture.BLK
     if img[7] == 0x75:                                       # seven-colour text program: the base for text renders
         mode, raw = 'text', False
     else:
         mode = MODE_BY_GREY.get(g, f'grey{g}')
         raw = img[B + 9] == 0 and struct.unpack_from('>I', img, B + 10)[0] == 0xcd
-    d = Path(config.get('templates_dir') or Path(__file__).parent / 'templates').expanduser(); d.mkdir(parents=True, exist_ok=True)
+    d = Path(a.out_dir or config.get('templates_dir') or config.state_dir() / 'templates').expanduser()
+    d.mkdir(parents=True, exist_ok=True)
     out = d / (('raw-' if raw else '') + mode + '.bin')
     out.write_bytes(img)
     print(f'{out}: {mode}{" (raw layout, for left/right pans)" if raw else ""}, {len(img)} B')

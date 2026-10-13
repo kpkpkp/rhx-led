@@ -40,6 +40,10 @@ def build(im, direction, mode='low-gray', speed=3):
 
 
 if __name__ == '__main__':
-    im = Image.open(sys.argv[1])
-    out = build(im, sys.argv[2], speed=int(sys.argv[4]) if len(sys.argv) > 4 else 3)
-    open(sys.argv[3], 'wb').write(out); print(sys.argv[3], len(out))
+    import argparse
+    ap = argparse.ArgumentParser(description='Build a program whose picture the controller pans forever')
+    ap.add_argument('image'); ap.add_argument('direction', choices=list(EFFECT)); ap.add_argument('out')
+    ap.add_argument('--speed', type=int, default=3); ap.add_argument('--mode', default='low-gray')
+    a = ap.parse_args()
+    out = build(Image.open(a.image), a.direction, a.mode, a.speed)
+    open(a.out, 'wb').write(out); print(a.out, len(out))

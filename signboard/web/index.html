@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#16130f" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#f5f1ea" media="(prefers-color-scheme: light)">
-<title>Kitchen Sign</title>
+<title>{{SIGN_NAME}}</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0907'/%3E%3Cg fill='%23f2a93b'%3E%3Ccircle cx='8' cy='12' r='2'/%3E%3Ccircle cx='14' cy='12' r='2'/%3E%3Ccircle cx='20' cy='12' r='2'/%3E%3Ccircle cx='8' cy='20' r='2'/%3E%3Ccircle cx='24' cy='20' r='2'/%3E%3Ccircle cx='14' cy='20' r='2'/%3E%3C/g%3E%3C/svg%3E">
 <style>
 :root{
@@ -170,7 +170,7 @@ footer{text-align:center;font-size:12px;color:var(--mut);padding-top:4px}
 
 <header>
   <div class="brand">
-    <h1>KITCHEN SIGN</h1>
+    <h1>{{SIGN_NAME_UPPER}}</h1>
     <span class="sub" id="panelInfo">128×32 · RHX8-Q1C</span>
   </div>
   <div class="chips">
@@ -605,17 +605,17 @@ async function refreshHealth() {
     if (S.direct) {
       // signd drives the sign itself; the phone only takes verification photos
       const cam = String(h.camera || '');
-      if (cam === 'ok') setChip($('chipPhone'), 'ok', 'camera ok', 'The shelf phone photographs the sign to check each change. Not needed to control it.');
+      if (cam === 'ok') setChip($('chipPhone'), 'ok', 'camera ok', 'The camera phone photographs the sign to check each change. Not needed to control it.');
       else setChip($('chipPhone'), 'warn', 'no camera', 'Camera phone offline: changes still go to the sign, they just are not photographed. ' + cam);
     }
-    else if (ph === 'ok') setChip($('chipPhone'), 'ok', 'phone ok', 'Shelf phone ' + (h.serial || '') + ' is ready');
+    else if (ph === 'ok') setChip($('chipPhone'), 'ok', 'phone ok', 'Camera phone is ready');
     else setChip($('chipPhone'), 'bad', ph.split(/[:(]/)[0].trim() || 'phone ?', ph);
     const q = h.queue || 0;
     if (q > 0) setChip($('chipQueue'), 'warn', q + ' queued'); else $('chipQueue').hidden = true;
     const b = $('banner');
     if (net.ok && !S.direct && /locked/i.test(ph)) {
       b.className = 'banner warn show';
-      b.innerHTML = '<div><b>The shelf phone is locked.</b> Messages can’t be sent until someone unlocks it and removes its screen lock.</div>';
+      b.innerHTML = '<div><b>The camera phone is locked.</b> Messages can’t be sent until someone unlocks it and removes its screen lock.</div>';
     } else if (net.ok && b.classList.contains('warn')) b.className = 'banner';
   } catch (e) { /* banner handled by api() for network errors */ }
 }
@@ -745,7 +745,7 @@ function jobStatus(el, label, j) {
     showStatus(el, 'run', esc(label) + ' queued' + (ahead ? ' behind ' + ahead + ' other job' + (ahead > 1 ? 's' : '') : '') + '…');
   } else if (j.state === 'running') showStatus(el, 'run', esc(label) + '… ' + fmtDur(tt.run) + ' <span class="mut">' + (S.direct
       ? '(sending to the sign over Bluetooth, usually a few seconds; then a photo to check it)'
-      : '(the shelf phone is working on it; this usually takes under a minute)') + '</span>');
+      : '(signd is working on it; this usually takes under a minute)') + '</span>');
   else if (j.state === 'recovering') showStatus(el, 'run', (S.direct ? 'Hit a snag, reconnecting to the sign and retrying… ' : 'Hit a snag, restarting the sign app and retrying… ') + fmtDur(tt.run));
   else if (j.state === 'done') {
     const w = witnesses(j);

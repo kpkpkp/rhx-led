@@ -5,19 +5,32 @@ MSB = leftmost pixel, row-major. A pixel's colour is its (R, G, B) bits, so 7 co
 "tlei" font draws the fill in the caption colour and a 1-px outline in a second colour (#ffff00 in our programs).
 Header u16 BE at +0x50 = W (text strip width in pixels), +0x52 = 32. The caption scrolls across the 128-px panel.
 """
+import json
 import struct
 
 from PIL import Image, ImageDraw, ImageFont
 
 HDR = 89
 H = 32
-FONTS = {
-    'bold': r'C:\Windows\Fonts\arialbd.ttf',
-    'narrow': r'C:\Windows\Fonts\ARIALNB.TTF',
-    'impact': r'C:\Windows\Fonts\impact.ttf',
-    'black': r'C:\Windows\Fonts\seguibl.ttf',
-    'verdana': r'C:\Windows\Fonts\verdanab.ttf',
+FONTS = {                      # name -> candidate files (Windows, macOS, Linux); API callers can only pick a name
+    'bold': [r'C:\Windows\Fontsrialbd.ttf', '/Library/Fonts/Arial Bold.ttf', '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
+             '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf'],
+    'narrow': [r'C:\Windows\Fonts\ARIALNB.TTF', '/System/Library/Fonts/Supplemental/Arial Narrow Bold.ttf',
+               '/usr/share/fonts/truetype/liberation/LiberationSansNarrow-Bold.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf'],
+    'impact': [r'C:\Windows\Fonts\impact.ttf', '/System/Library/Fonts/Supplemental/Impact.ttf', '/usr/share/fonts/truetype/msttcorefonts/Impact.ttf'],
+    'black': [r'C:\Windows\Fonts\seguibl.ttf', '/System/Library/Fonts/Supplemental/Arial Black.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'],
+    'verdana': [r'C:\Windows\Fontserdanab.ttf', '/System/Library/Fonts/Supplemental/Verdana Bold.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'],
 }
+
+
+def load_font(name='bold', size=26):
+    """A named font at a clamped size; falls back to Pillow's built-in font when none of the files exist."""
+    import os
+    size = max(8, min(40, int(size)))
+    for path in FONTS.get(name) or FONTS['bold']:
+        if os.path.exists(path):
+            return ImageFont.truetype(path, size)
+    return ImageFont.load_default(size)
 NAMED = {'red': '#ff0000', 'green': '#00ff00', 'yellow': '#ffff00', 'blue': '#0000ff',
          'cyan': '#00ffff', 'magenta': '#ff00ff', 'white': '#ffffff', 'black': '#000000'}
 
@@ -31,7 +44,7 @@ def rgb_bits(color):
 
 def text_mask(text, font='bold', size=26, y=None):
     """Text -> 1-bit PIL image, height 32, width = ink width + 2 px (thresholded, no anti-aliasing)."""
-    f = ImageFont.truetype(FONTS.get(font, font), size)
+    f = load_font(font, size)
     x0, y0, x1, y1 = f.getbbox(text)
     w = max(1, x1 - x0) + 2
     im = Image.new('L', (w, H), 0)
@@ -259,7 +272,7 @@ def _edit_json(js: bytes, text, color):
     m = re.search(r'("para": ")(0-R\)H\(X-)(.*?)(-R\)H\(X-\d+-R\)H\(X-\d+-R\)H\(X-\d+-R\)H\(X-)(#[0-9a-fA-F]{6})', s)
     if not m:
         return js
-    t = m.group(3) if text is None else text.replace('"', "'").replace('\\', '/')
+    t = m.group(3) if text is None else json.dumps(text.replace('"', "'").replace('\\', '/'))[1:-1]   # JSON-escape control characters
     c = m.group(5) if color is None else NAMED.get(str(color).lower(), color)
     s = s[:m.start()] + m.group(1) + m.group(2) + t + m.group(4) + c + s[m.end():]
     return s.encode('utf-8')

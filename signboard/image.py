@@ -1,25 +1,19 @@
-"""RHX8-Q1C program image (the `dc02` upload) — container parser. Pure functions, no I/O.
+"""RHX program image (the `dc02` upload): container parser and wire stream. Pure functions, no I/O.
 
-Layout as stored in the sign (sign address = upload offset + 4; the wire frame carries 4 prefix bytes 00 00 00 ff):
+Sign memory address = image offset (the image starts with the 4 prefix bytes 00 00 00 ff). Big-endian throughout.
 
-  0x00  00 00 00 ff            prefix (part of the wire payload)
-  0x04  u32 BE 0x75            version/kind (constant in all captures)
-  0x08  u16 BE width, u16 BE height
-  0x0c  u8 00
-  0x0d  u32 BE  -> history section: u32 BE len, then "ProPhoneMsg:..." records (appended on every send)
-  0x11  u32 BE  total length (through the trailer)
-  0x15  03 03 fc fc 00 00 00 2d 00 00 00 0c
-  0x21  u32 BE  -> project section: u16 0001, u32 BE json_len, then "ProPhoneMsg-R)H(X-..." + JSON
-  0x25  9 zero bytes
-  0x2e  72 B    controller config block (same bytes the `8204` command returns)
-  0x76  ...     render area: pointer/row tables (LE u32, 0x1ccb = empty-row sentinel), RLE bitmaps (0xa5 escapes)
-  json  the app's project JSON (what Readback returns), then 4 bytes (purpose unknown)
-  hist  send-history log, appended to on every send
-  ...   more tables/bitmaps
-  end   u32 BE sum(all preceding bytes) , u16 BE (sum >> 16)
+  0x00  00 00 00 ff            prefix
+  0x04  u32 kind               0x75 = seven-colour text program, 0x73 = picture program
+  0x08  u16 width, u16 height
+  0x0d  u32 -> history section: u32 len, then the app's "ProPhoneMsg:..." send-history records
+  0x11  u32 total length       = len(image) - 4 (an image ends with a 6-byte trailer)
+  0x21  u32 -> project section: u16 0001, u32 json_len, project tag + JSON (the app's description, used on readback)
+  0x2e  72 B controller config (byte 0x72 = 8-bit sum of 0x2f..0x71)
+  0x76  render area / picture header, then row-pointer tables (u32 absolute addresses) and RLE rows
+        (X a5 n = X plus n more copies), ending with a footer: u32 decoded size, u32 RLE length, 04
 
-Rendering the bitmaps (text + background frames) is NOT implemented; `split`/`join` round-trip captured
-images byte-exact so the known parts can be edited and the trailer regenerated.
+See docs/PROTOCOL.md. render.py, picture.py, sequence.py and pan.py build the contents; split/join here round-trip
+captured images byte-exact.
 """
 import struct
 
@@ -75,6 +69,8 @@ def wire_stream(img: bytes, chunk: int = 500):
     body = img[:-6]
     if body[:4] != PREFIX:
         raise ValueError('image must start with 00 00 00 ff')
+    if struct.unpack_from('>I', img, 0x11)[0] != len(img) - 4:
+        raise ValueError('header length does not match the image (is the 6-byte trailer missing?)')
     s1 = sum(body) & 0xffffffff
     s1b = struct.pack('>I', s1)
     s2 = (s1 + sum(s1b)) & 0xffffffff

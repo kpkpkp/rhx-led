@@ -10,14 +10,16 @@ from a seven-colour text program. These files come from the vendor's software, s
    repeat parts of the picture across the extra columns.
 2. For each mode you want: gear → **Setting** → **WorkMode** → choose the mode → back. Add a picture (or, for the
    text template, a text item in *Seven colors background*) filling the whole screen. Remove any program background.
-3. Press **USB drive**. The app writes the program to `C:\LedRom`.
+3. Press **USB drive**. The app writes the program to a single file, `C:\LedRom` (copy it off a USB stick if you
+   exported to one).
 4. Import it before making the next one:
 
    ```
    python -m signboard.import_ledrom C:\LedRom
    ```
 
-   This writes `signboard/templates/<mode>.bin` (or the folder set as `templates_dir`).
+   This writes `<state_dir>/templates/<mode>.bin` (default `~/.signboard/templates`, or `templates_dir` from your
+   config). `signboard/templates/` inside the package is also searched.
 
 For **left/right pans** also export one picture with ShowWay **Left_Continue**: it uses a different (raw) layout
 and is saved as `raw-<mode>.bin`.

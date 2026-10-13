@@ -10,6 +10,11 @@ on and off, set the brightness, and run it all from a small LAN web service.
 
 Not affiliated with the controller's manufacturer. Reverse-engineered for interoperability with hardware we own.
 
+**Tested hardware:** one RHX8-Q1C (card 216) driving a 128×32 RGB panel made of two chained 64×32 HUB75 modules at
+1/16 scan, from Windows 11. **Untested:** other RHX models and panel sizes, Linux/macOS BLE (should connect; the fast
+upload path is Windows-only), Wi-Fi control, firmware updates, password changes. `docs/controller-capabilities.md`
+maps what the controller family can do and what is still unknown.
+
 ## What works (tested on real hardware, with a camera watching the sign)
 
 | | |
@@ -35,7 +40,7 @@ Requirements: Python 3.11+ and a Bluetooth LE adapter. Install with `pip install
    password.
 2. **Templates.** Picture and text programs are built on templates made from your own RHX Plus exports (they are
    the vendor's files, so they are not shipped here). Follow `docs/templates.md`: one "USB drive" export per mode,
-   then `python -m signboard.import_ledrom <export>`.
+   then `python -m signboard.import_ledrom C:\LedRom` (the export is one file).
 3. **Try it.**
 
    ```
@@ -45,7 +50,14 @@ Requirements: Python 3.11+ and a Bluetooth LE adapter. Install with `pip install
    python -m signboard.signd --port 8090      # web UI + API on http://<this host>:8090/
    ```
 
+   **Without templates** these already work: `status`, `on`/`off`, `brightness N`, `read-image` (do this first: it is
+   your backup), uploading an existing `.bin`, and `python -m signboard.selftest`. Text, pictures, sequences,
+   patterns and pans need the matching template.
+
 4. `python -m signboard.selftest` runs the offline checks (more of them once templates are installed).
+
+**signd has no login.** It refuses requests for unknown host names and cross-site browser requests, but anyone on
+your network can use it. Run it only on a network you trust, or with `--bind 127.0.0.1`.
 
 ## Layout
 

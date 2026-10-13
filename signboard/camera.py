@@ -1,4 +1,4 @@
-"""Real photos from the shelf phone's rear camera (Pixel 2, Google Camera), pulled as full-resolution JPEGs.
+"""Real photos from a camera phone's rear camera (Android + Google Camera over adb; tested on a Pixel 2), pulled as full-resolution JPEGs.
 
 Never a screenshot: the viewfinder preview is a low-resolution, tone-mapped stand-in and is not evidence of what the
 sign shows. If no new JPEG lands, take() raises.

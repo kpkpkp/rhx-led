@@ -1,9 +1,9 @@
 """Verdicts for a sign change, from the two independent witnesses signd has.
 
-camera: the shelf phone's rear camera sees the sign. A viewfinder screenshot is judged for "is the sign lit"
+camera: the camera phone's rear camera sees the sign. A photo is judged for "is the sign lit"
 and "is the lit colour the one we asked for". No OCR: LED text scrolls and the camera is uncalibrated, so the
 dominant hue of the bright saturated pixels is the reliable signal. The sign is the only saturated light source
-in a kitchen at night; by day the thresholds still hold because LEDs saturate the sensor.
+in a room at night; by day the thresholds still hold because LEDs saturate the sensor.
 
 ble: the controller's own program (text/colour) read back over BLE after the app lets go of the link.
 """
@@ -11,7 +11,7 @@ import colorsys
 
 from PIL import Image
 
-HUES = {  # name -> (centre hue in degrees, half-width); tuned on the Pixel 2 looking at this sign (green = 160-175)
+HUES = {  # name -> (centre hue in degrees, half-width); tuned on one phone camera looking at one sign (green = 160-175)
     'red': (0, 18), 'yellow': (55, 25), 'green': (135, 38), 'cyan': (186, 13), 'blue': (230, 25), 'magenta': (300, 25),
 }
 
@@ -44,7 +44,7 @@ def judge_photo(path, color=None, sample=4):
         bright += 1
         if m >= 245: clip += 1                     # near-clipping: LEDs do this, a lit wall does not
         n = _name(h)
-        if s >= 0.5:                               # night: LEDs at s 0.6-1.0, warm tiles under room light at 0.2-0.4
+        if s >= 0.5:                               # night: LEDs at s 0.6-1.0, warm walls under room light at 0.2-0.4
             sat += 1; xs.append(i % w); ys.append(i // w); vs.append(v)
             if n: hist[n] = hist.get(n, 0) + 1
         elif s >= 0.25:                            # daylight: the same LEDs photograph washed out, s 0.1-0.4
@@ -66,7 +66,7 @@ def judge_photo(path, color=None, sample=4):
            'brightness': round(sum(vs) / len(vs), 2) if vs else 0.0}
     if color:
         color = color.lower()
-        if color in ('white', 'yellow'):            # the Pixel 2 white-balances yellow LEDs to white (s 0.0-0.1)
+        if color in ('white', 'yellow'):            # phone cameras white-balance yellow LEDs to white (s 0.0-0.1)
             out['color_ok'] = out['lit'] and (white or seen == color)
             if color == 'yellow' and white: out['note'] = 'yellow renders as white on this camera'
         else:

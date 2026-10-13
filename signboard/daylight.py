@@ -51,6 +51,6 @@ if __name__ == '__main__':
         e, morning = solar_elevation(t)
         p = policy(e, morning)
         if p != last:
-            local = t - timedelta(hours=6)       # MDT, enough for a printout
-            print(f'{local:%H:%M} MDT  sun {e:6.1f} deg  ->', 'off' if not p[0] else f'on, level {p[1]}')
+            local = t.astimezone()               # this computer's local time
+            print(f'{local:%H:%M %Z}  sun {e:6.1f} deg  ->', 'off' if not p[0] else f'on, level {p[1]}')
             last = p

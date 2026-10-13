@@ -4,7 +4,7 @@ Exit 1 if anything is found (use as a pre-commit hook)."""
 import re, sys
 from pathlib import Path
 GENERIC = [
-    (r'\b(?:[0-9A-F]{2}:){5}[0-9A-F]{2}\b', 'BLE/MAC address'),
+    (r'(?i)\b(?:[0-9A-F]{2}[:-]){5}[0-9A-F]{2}\b', 'BLE/MAC address'),
     (r'\b(?:192\.168|10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b', 'private IP address'),
     (r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}', 'email address'),
     (r'adb-[A-Z0-9]{8,}', 'adb device name'),
@@ -22,9 +22,9 @@ def main():
     pats = GENERIC + [(re.escape(w), 'site word') for w in words]
     hits = 0
     for f in sorted(root.rglob('*')):
-        if not f.is_file() or '.git' in f.parts: continue
+        if not f.is_file() or '.git' in f.parts or '__pycache__' in f.parts or f.suffix == '.pyc': continue
         if f.suffix.lower() in SKIP_EXT:
-            print(f'BINARY  {f.relative_to(root)} (check by hand)'); continue
+            hits += 1; print(f'BINARY  {f.relative_to(root)} (images/binaries need a manual check; remove or allowlist)'); continue
         try: text = f.read_text(encoding='utf-8')
         except UnicodeDecodeError: print(f'BINARY  {f.relative_to(root)} (not text)'); continue
         for n, line in enumerate(text.splitlines(), 1):
