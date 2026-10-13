@@ -842,7 +842,26 @@ def advertise(name, port):
     zc = Zeroconf()
     zc.register_service(info, allow_name_change=True)
     print(f'mdns: http://{name}.local' + ('' if port == 80 else f':{port}') + f'/ -> {ip}', flush=True)
-    return zc
+    return zc, ip
+
+
+def keep_advertising(name, port, every=60):
+    """advertise(), retried until the LAN is up and redone when our address changes: after a reboot the Wi-Fi can
+    come up after signd, and a failed first try used to leave <name>.local unanswered until a restart (2026-10-13)."""
+    zc, ip, last_err = None, None, None
+    while True:
+        try:
+            now = lan_ip()
+            if now != ip:
+                if zc:
+                    zc.close()
+                zc, ip = advertise(name, port)
+            last_err = None
+        except Exception as e:
+            if str(e) != last_err:
+                print('mdns: not advertising yet:', e, flush=True)
+            last_err, zc, ip = str(e), None, None
+        time.sleep(every)
 
 
 def main():
@@ -882,10 +901,8 @@ def main():
         except OSError as e:
             print(f'cannot listen on {extra}: {e}', flush=True)
     if a.mdns:
-        try:
-            advertise(a.mdns, 80 if 80 in a.also_port or a.port == 80 else a.port)
-        except Exception as e:
-            print('mdns failed:', e, flush=True)
+        threading.Thread(target=keep_advertising, args=(a.mdns, 80 if 80 in a.also_port or a.port == 80 else a.port),
+                         daemon=True, name='mdns').start()
     ThreadingHTTPServer((a.bind, a.port), handler).serve_forever()
 
 
