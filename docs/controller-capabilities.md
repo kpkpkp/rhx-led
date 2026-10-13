@@ -1,6 +1,6 @@
 # RHX8-Q1C controller: capability map
 
-Compiled 2026-10-12. Read-only research (vendor site, vendor spec sheet and manual, the RHX Plus card tables, app QML and string dumps). No device was contacted. "Verified" means verified on our sign as recorded in `CLAUDE.md`.
+Compiled 2026-10-12. Read-only research (vendor site, vendor spec sheet and manual, the RHX Plus card tables, app QML and string dumps). No device was contacted. "Verified" means verified on our sign (camera photos or readback), as recorded in `docs/PROTOCOL.md`.
 
 Confidence tags: **[spec]** = vendor spec sheet or manual (marketing, but specific to this card), **[table]** = the app's machine-readable card table, **[app]** = app UI or command code (the feature exists somewhere in the family, not necessarily on Q1C), **[inferred]** = our reading of photos or strings.
 
@@ -27,7 +27,7 @@ Confidence tags: **[spec]** = vendor spec sheet or manual (marketing, but specif
 | 4 High gray (no bg) | 32×128 | 32×128 | 32×128 | 128 | exactly fits |
 | 5 True colour (no bg) | **32×96** | 32×96 | 32×96 | 96 | **does not fit** |
 
-Our camera tests agree: true colour only draws 96 columns (`CLAUDE.md`, "Screen width < 128"). For our panel this is a hardware/firmware limit, not a builder bug. "Background + colourful text together" lowers these numbers on small cards (manual, §屏参设置 item 7).
+Our camera tests agree: true colour only draws 96 columns (`docs/PROTOCOL.md`, screen width < 128). For our panel this is a hardware/firmware limit, not a builder bug. "Background + colourful text together" lowers these numbers on small cards (manual, §屏参设置 item 7).
 
 ## 2. Feature map
 
@@ -45,7 +45,7 @@ Status key: VERIFIED / PARTIAL / NOT YET USED / UNSUPPORTED on Q1C / UNKNOWN.
 | Areas / partitions | Free areas: subtitle, text, table, picture, animation, dial, digital time, lunar, count up/down; auto split; programme and area backgrounds | spec items 12, 18; QML `rc*` types | **PARTIAL**: we use area A (caption) over a background, or a full-screen picture. No multi-window layouts yet. |
 | Clock / date / dial / lunar | Digital time (styles, time zone), analogue dial, Chinese lunar calendar | manual §4.3–4.5; changelog 8.0.60 (time zones) | **NOT YET USED**. Needs the RTC, which is probably on board. |
 | Count up / countdown | Target date/time; counts up if past | manual §4.6; QML `rcTimer`, `targetDate` | **NOT YET USED** |
-| Stopwatch, counter, button program switching | Physical keys or 433 MHz remote | manual Q12–14: "适用卡型 RHX8-T8 only" | **UNSUPPORTED on Q1C**: our 0x16 `programerCmd` got "unknown command" (CLAUDE.md "Deltas") |
+| Stopwatch, counter, button program switching | Physical keys or 433 MHz remote | manual Q12–14: "适用卡型 RHX8-T8 only" | **UNSUPPORTED on Q1C**: our 0x16 `programerCmd` got "unknown command" (`docs/PROTOCOL.md`) |
 | Temperature / humidity / 8-in-1 / ModBus RS485 | External sensors, ModBus slave (PM2.5, wind, CO2 …) | manual Q15–16: T8 only; no ports on the Q1C board | **UNSUPPORTED** (no hardware) |
 | Brightness, manual | 16 levels | spec; opcode `0a` | **VERIFIED** (levels 1..16) |
 | Brightness, timed | "定时调亮" schedule | opcode `0c` + 12 bytes (`timeBright`); QML `timerBright` | **NOT YET USED** (signd's scheduler does this on the host) |
@@ -54,9 +54,9 @@ Status key: VERIFIED / PARTIAL / NOT YET USED / UNSUPPORTED on Q1C / UNKNOWN.
 | Power on/off now | Yes | opcodes `08`/`09` | **VERIFIED** |
 | Power schedules | 4 on/off time pairs | spec "定时开关机 4组"; opcode `0d` + 9 bytes (`timePower`; the app's "power on" is `0d ff×9`) | **NOT YET USED** natively. We send `0d ff×9 04` as the login hello, which may also be "clear timers". See unknowns. |
 | Clock set | "校时" | opcode `07` (`correctionTime`) | **NOT YET USED** |
-| WiFi AP | Own hotspot `RHX8-Q1C#…`; name/password changeable (letters and digits, at least 8) | spec; opcodes `80`, `77`, `89c0` | **NOT YET USED** (`tcp.py` exists, untested) |
+| WiFi AP | Own hotspot `RHX8-Q1C#…`; name/password changeable (letters and digits, at least 8) | spec; opcodes `80`, `77`, `89c0` | **NOT YET USED** (no TCP transport in this repo yet) |
 | WiFi STA (join router) / LAN | "WiFi cards can join a router, LAN comms (latest version)" | manual §核心特点; QML `setRouter`, `ConnectRHXWifi` | **UNKNOWN** for Q1C |
-| TCP port | `tcp.py` assumes 3000 at 192.168.4.1 | our code only; the Q2C firmware also has 192.168.47.x addresses | **UNKNOWN** | <!-- scan:ok vendor default AP addresses -->
+| TCP port | port 3000 at 192.168.4.1 assumed in an early, unpublished experiment | our guess only; the Q2C firmware also has 192.168.47.x addresses | **UNKNOWN** | <!-- scan:ok vendor default AP addresses -->
 | Cloud server | 4G cards and network cards; "WiFi cards remote cloud (latest)" | manual ch. 7; QML `useRHXServer`, `setCloudServerIP` | **UNKNOWN**, probably not on Q1C |
 | BLE | GATT write/notify, one central | our `direct.py` | **VERIFIED** (production path) |
 | USB drive | "小卡不支持优盘" (small cards: no USB) | spec item 29; no port | **UNSUPPORTED** (vendor `C:\LedRom` export still useful as a template source) |
@@ -73,7 +73,7 @@ Status key: VERIFIED / PARTIAL / NOT YET USED / UNSUPPORTED on Q1C / UNKNOWN.
 | Firmware update | "升级控制卡", "特定固件升级"; cloud OTA for 4G cards | manual; opcode `70e1` + `02 41` | **NOT YET USED**. High risk. |
 | Factory init | Normal init (`98a5`, `1b`); "super init" (power-cycle, then reconnect within 1 min) resets everything, SSID gets "AP1" | manual Q10 | **NOT YET USED**. Destructive. |
 | Test / ageing mode | Panel test patterns, "extreme test" | spec 25; `97 xx` | **NOT YET USED** |
-| Partial / delta upload | — | — | **UNSUPPORTED**: every 78e1 erases the program (CLAUDE.md) |
+| Partial / delta upload | — | — | **UNSUPPORTED**: every 78e1 erases the program (`docs/PROTOCOL.md`) |
 
 ## 3. Not covered by us yet (prioritised)
 

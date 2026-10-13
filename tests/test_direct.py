@@ -87,3 +87,24 @@ def test_read_image_refuses_an_erased_sign(ctrl):
     s = emulated_sign(ctrl)
     with pytest.raises(SignError):
         s.read_image()
+
+
+def test_oversized_program_is_refused_before_anything_is_sent(ctrl):
+    """A program over the controller's ~600 KB area stalls mid-transfer after 78e1 erased the old one: blank panel."""
+    from signboard import direct
+    s = emulated_sign(ctrl)
+    good = synthetic_image()
+    s.upload(good)
+    sent = len(ctrl.log)
+    with pytest.raises(SignError, match='Nothing was sent'):
+        s.upload(synthetic_image(payload=bytes(direct.MAX_PROGRAM + 1024)))
+    assert not [b for d, b in ctrl.log[sent:] if d == '>'] and ctrl.image() == good
+
+
+def test_upload_recovers_from_a_dead_transfer(ctrl):
+    """After an oversized upload the controller answers 78e1 with 81dc03 progress only, until dc04 closes it."""
+    s = emulated_sign(ctrl)
+    ctrl.dead_transfer = True
+    img = synthetic_image()
+    s.upload(img)
+    assert ctrl.image() == img and not ctrl.dead_transfer

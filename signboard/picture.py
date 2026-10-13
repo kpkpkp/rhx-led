@@ -22,7 +22,8 @@ MODES = ('seven-lengthen', 'low-gray', 'middle-gray', 'high-gray', 'true-color')
 LABELS = {'seven-lengthen': 'Seven colour', 'low-gray': 'Low gray', 'middle-gray': 'Middle gray',
           'high-gray': 'High gray', 'true-color': 'True color'}
 BLK = 0xbf
-MAX_UPLOAD = 256 * 1024                 # 78e1/dc02 sizes are 32-bit; 178 KB uploads verified (2026-10-12). A practical cap.
+MAX_UPLOAD = 256 * 1024                 # practical cap for one picture (upload time); the controller holds ~600 KB
+                                        # (direct.MAX_PROGRAM), 354 KB sequences verified (2026-10-12)
 SCROLL, STILL = 17, 1                    # ShowWay: Up_Continue scrolls a tall picture; 1 shows it in place
 
 

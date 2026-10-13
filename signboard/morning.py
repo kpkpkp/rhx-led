@@ -4,7 +4,7 @@
 
 Until --at: every --every seconds, photograph the sign; if it is lit (e.g. signd's auto-light switched it on at
 sunrise), power it off over direct BLE. At --at: upload the program (an upload also wakes the display), power on,
-photograph, and retry up to 3 times if the camera does not see it lit. Everything is logged to ~/signd-morning.log.
+photograph, and retry up to 3 times if the camera does not see it lit. Everything is logged to <state_dir>/signd-morning.log.
 """
 import argparse
 import datetime as dt

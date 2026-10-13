@@ -26,6 +26,11 @@ WRITE_UUID = '28be4a4a-cd67-11e9-a332-2a2ae2dbccff'
 NOTIFY_UUID = '28be4cb6-cd67-11e9-a323-2a2ae2dbccee'
 UPLOAD_SETTLE_S = 3.0  # no 78e1 login this soon after an upload (it can break the program just written)
 IDLE_S = 5            # release the link quickly: the controller takes one central, and others (the app, cron jobs) need it
+# Program area of the RHX8-Q1C: a 735 KB upload stalled after about 600 KB, and a 354 KB one plays fine (2026-10-12).
+# An oversized upload is worse than useless: 78e1 has already erased the old program and the controller stays stuck in
+# the dead transfer, so the panel goes blank. Refuse before sending anything.
+MAX_PROGRAM = 590 * 1024
+RESTORE_PAUSE_SCALE = 1.0   # tests set 0
 
 
 class SignError(RuntimeError):
@@ -223,13 +228,19 @@ class DirectSign:
             self._rx.clear()
             self.write(req)
             r = self.wait_for(lambda b: b if (b'\x59\xa0\x08' in b and len(b) >= b.find(b'\x59\xa0\x08') + 11)
-                              or (b'\x81\xdc\x02' in b and len(b) >= b.find(b'\x81\xdc\x02') + 11) else None, 10)
+                              or (b'\x81\xdc\x02' in b and len(b) >= b.find(b'\x81\xdc\x02') + 11)
+                              or b'\x81\xdc\x03' in b else None, 10)
             if mine in r:
                 return
             if b'\x59\xa0\x08' in r:
                 c = r[r.find(b'\x59\xa0\x08'):]
                 r2 = self.expect(protocol.auth_response_frame(crypto.solve_challenge(c[3:11], 1, password or self.password())), b'\x59\xa3\x08', 8)
                 self.expect(protocol.auth_response_frame(crypto.solve_challenge(r2[3:11], 2, password or self.password())), b'\x59\xa1')
+                continue
+            if b'\x81\xdc\x02' not in r:                # 81dc03 progress from a dead transfer (e.g. an oversized upload)
+                self.log('dead transfer still reporting progress -> closing it')
+                self.write(protocol.finish_upload())
+                time.sleep(2.0)
                 continue
             self.log('stale upload pending:', r[r.find(b'\x81\xdc\x02'):][:11].hex(), '-> closing it')
             self.write(protocol.finish_upload())
@@ -275,6 +286,9 @@ class DirectSign:
         controller always writes from address 0 (tested 2026-10-12), so there are no partial uploads."""
         from signboard import image
         packets, size = image.wire_stream(img)
+        if size > MAX_PROGRAM:
+            raise SignError(f'program is {size // 1024} KB; the controller holds about {MAX_PROGRAM // 1024} KB '
+                            '(fewer pictures, a shallower work mode, or a smaller picture). Nothing was sent.')
         with self.lock:
             self.ensure()
             t0 = time.time()
@@ -301,11 +315,15 @@ class DirectSign:
             if not ok:
                 good = getattr(self, '_last_good', None)
                 if good and good != img and not _restoring:
-                    self.log('upload failed: putting the last good program back')
-                    try:
-                        self.upload(good, fast=False, _restoring=True)
-                    except Exception as e:
-                        self.log('restore failed too:', e)
+                    for wait in (3, 15, 45):                # a controller stuck in a dead transfer needs time
+                        self.log(f'upload failed: putting the last good program back in {wait} s')
+                        self._reset_link()
+                        time.sleep(wait * RESTORE_PAUSE_SCALE)
+                        try:
+                            self.upload(good, fast=False, _restoring=True)
+                            break
+                        except Exception as e:
+                            self.log('restore attempt failed:', e)
                 raise SignError(f'controller rejected the upload: {done[:11].hex() or err}')
             self._last_upload = time.time()
             self._last_good = img

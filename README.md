@@ -25,11 +25,31 @@ maps what the controller family can do and what is still unknown.
 | Pans | one picture scrolled by the controller itself, up / down / left / right, a few KB |
 | Patterns | seamless tessellations panned in a square loop with clean corners (`signboard.patterns`) |
 | Control | power on/off and brightness 1–16 without disturbing the stored program |
-| Speed | ~16 KB/s uploads on Windows (throughput-optimised BLE link); programs of 178 KB verified |
+| Speed | ~16 KB/s uploads on Windows (throughput-optimised BLE link); programs up to 354 KB verified |
 | Service | `signd`: HTTP API + web UI on the LAN, mDNS name, job queue, schedules, optional camera verification |
 
 What the controller does **not** do (tested): partial writes or live updates. Every change is a full program upload,
 so small programs are fast and big animations are slow. See `docs/PROTOCOL.md`.
+
+### Colour modes and memory
+
+| Mode | Bits per channel | Width on a 128×32 panel | Row table per picture |
+|---|---|---|---|
+| seven-colour (text programs) | 1 | 128 | (text: caption + background) |
+| low gray | 2 | 128 | 768 B |
+| middle gray | 4 | 128 | 1.5 KB |
+| high gray: full colour, about 262,000 colours | 6 | 128 | 2.3 KB |
+| true colour | 8 | 96 only (card limit) | 3 KB |
+
+- **Memory:** the controller (RHX8-Q1C) holds about **600 KB** of program. `direct.upload()` refuses anything larger
+  before sending a byte, because an oversized upload has already erased the old program when it stalls, and the panel
+  goes dark. A sequence holds at most **255 pictures**. So colour depth trades against animation length: a 95-picture
+  full-colour animation is about 350 KB, and 200 pictures fit in low gray.
+- **Thin text:** in seven-colour mode, 1–2 px strokes survive only without speck filters. Grey modes keep small text
+  crisp and allow anti-aliased edges.
+- **Gamma:** at low brightness the LEDs show small channel values far brighter than linear, so a red car with a little
+  green and blue in it turns pink. Gamma-encode frames before building grey-mode programs
+  (`img.point([round(255 * (v / 255) ** 2.2) for v in range(256)] * 3)`). Proper per-panel calibration is planned.
 
 ## Quick start
 

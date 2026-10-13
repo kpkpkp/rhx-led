@@ -116,3 +116,10 @@ def test_reference_samples(samples, monkeypatch):
     """Byte-exact against the vendor app's captured upload, join/caption identities, background round trip."""
     monkeypatch.setattr(selftest, 'HERE', samples)
     selftest.check_samples()
+
+
+def test_sequence_picture_limit():
+    """The picture block counts images in one byte: more than 255 used to fail with 'byte must be in range'."""
+    from signboard import sequence
+    with pytest.raises(ValueError, match='1..255 pictures'):
+        sequence.build([Image.new('RGB', (128, 32))] * 256)

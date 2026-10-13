@@ -62,6 +62,7 @@ def no_settle(monkeypatch):
     """The controller needs seconds between an upload and the next login; the emulator does not."""
     from signboard import direct
     monkeypatch.setattr(direct, 'UPLOAD_SETTLE_S', 0.0)
+    monkeypatch.setattr(direct, 'RESTORE_PAUSE_SCALE', 0.0, raising=False)
 
 
 def synthetic_image(kind=0x75, payload=b'', json_text=b'{"test": true}'):

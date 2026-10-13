@@ -6,7 +6,7 @@ It models what the real controller was seen to do, including the awkward parts t
   - an accepted upload stays pending until dc04 or a reconnect: 78e1 and ae01 meanwhile answer the stale 81dc02
   - dc02 data packets larger than 20 B are only understood after ae01 negotiated 500-byte packets on this link
   - the stored image is body + S1 (see image.wire_stream); reads (0e01, ac01, 0e02) need no login
-Fault injection: drop_after (packets into the next stream), corrupt_next (flip a byte of the next stream),
+Fault injection: dead_transfer (the stuck state after an oversized upload), drop_after (packets into the next stream), corrupt_next (flip a byte of the next stream),
 corrupt_if (flip a byte of every stream it matches).
 
 Where the real controller's behaviour is unknown the emulator picks something simple and says so (# model:).
@@ -28,7 +28,7 @@ class LinkDropped(Exception):
 class FakeController:
     def __init__(self, password='testpass1', memory=b''):  # scan:ok test-only password
         self.password = password
-        self.mem = bytearray(memory) + bytearray(b'\xff' * (512 * 1024 - len(memory)))
+        self.mem = bytearray(memory) + bytearray(b'\xff' * (1024 * 1024 - len(memory)))
         self.erased = not memory
         self.display_on, self.brightness = True, 16
         self.authed = False             # model: a login survives reconnects (the hello then answers 88 at once)
@@ -37,6 +37,7 @@ class FakeController:
         self.drop_after = None
         self.corrupt_next = False
         self.corrupt_if = None          # callable(stream) -> True to damage that stream (every attempt)
+        self.dead_transfer = False      # stuck after an oversized upload: 78e1 only gets 81dc03 progress until dc04
         self.log = []                   # (direction, bytes) for assertions
         self.link = None
         self.uploads = 0
@@ -93,6 +94,7 @@ class FakeController:
             return self._stream(data)
         if cmd == 0xdc and body[:1] == b'\x04':
             self.pending = None
+            self.dead_transfer = False
             return
         if cmd in (0x08, 0x09):
             if not self.authed:
@@ -135,6 +137,8 @@ class FakeController:
             self._open(self._after_login)            # model: the 78e1 that asked for the login now opens
 
     def _begin(self, size):
+        if self.dead_transfer:
+            return self.send(b'\x81\xdc\x03' + b'\x00' * 4 + struct.pack('>II', 735641, 601000))
         if not self.authed:
             self._after_login = size
             return self._challenge(1)

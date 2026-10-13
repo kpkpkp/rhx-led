@@ -363,7 +363,7 @@ class ReadCache:
 
 def auto_light(jobs):
     """Every 5 min: sun position -> (power, level) per signboard/daylight.py; act only when the target changes, so a
-    manual change holds until the next transition. State persists in ~/signd-light.json across restarts."""
+    manual change holds until the next transition. State persists in <state_dir>/signd-light.json across restarts."""
     from signboard.daylight import solar_elevation, policy
     f = config.state_file('light.json')
     try: last = json.loads(f.read_text())

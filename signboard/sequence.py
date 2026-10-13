@@ -14,7 +14,13 @@ from signboard import picture
 PICTURE_MS = 83          # at speed 10 (measured)
 
 
+MAX_PICTURES = 255                      # the picture block counts images in one byte
+
+
 def build(frames, mode='low-gray', effect=25, speed=10, stop=0, background=None):
+    if not 1 <= len(frames) <= MAX_PICTURES:
+        raise ValueError(f'a sequence holds 1..{MAX_PICTURES} pictures, got {len(frames)} '
+                         '(hold a frame by repeating it fewer times, or move more pixels per frame)')
     t = picture.template(mode); g = t[0x37]; B = picture.BLK
     W = struct.unpack_from('>H', t, B + 5)[0]; bpr = (W + 7) // 8
     table = struct.unpack_from('>I', t, B + 10)[0] - 4 * 3 * (g + 1) * 32
