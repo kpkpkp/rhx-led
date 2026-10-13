@@ -240,7 +240,10 @@ def test_state_follows_jobs_and_survives_restart(tmp_path):
 
 
 def test_api_state(server):
+    if not any((d / 'text.bin').is_file() for d in picture.template_dirs()):
+        pytest.skip('no text template')
     port, _, jobs = server
+    signd.PROGRAMS.joinpath('current.bin').write_bytes(picture.template('text'))
     j = call(port, 'POST', '/api/text', {'text': 'State', 'color': 'yellow', 'background': 'none'})[1]
     assert wait_job(port, j['id'])['state'] == 'done'
     st, v = call(port, 'GET', '/api/state')
