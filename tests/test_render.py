@@ -123,3 +123,22 @@ def test_sequence_picture_limit():
     from signboard import sequence
     with pytest.raises(ValueError, match='1..255 pictures'):
         sequence.build([Image.new('RGB', (128, 32))] * 256)
+
+
+def test_photo_check_ignores_things_outside_the_panel(tmp_path, monkeypatch):
+    """A lit room with a yellow reference ball above a dark panel read as 'lit, yellow' before camera_panel_box."""
+    from PIL import ImageDraw
+    from signboard import config, verify
+    im = Image.new('RGB', (800, 600), (200, 190, 180))                 # warm wall
+    d = ImageDraw.Draw(im)
+    d.polygon([(100, 300), (700, 250), (710, 470), (110, 450)], fill=(10, 10, 10))   # dark panel, seen at an angle
+    d.ellipse((370, 130, 450, 210), fill=(250, 210, 0))                # the ball, above the panel
+    p = tmp_path / 'room.jpg'; im.save(p)
+    monkeypatch.setitem(config.CFG, 'camera_panel_box', None)
+    assert verify.judge_photo(p)['lit']                                 # fooled by the ball
+    monkeypatch.setitem(config.CFG, 'camera_panel_box', [0.15, 0.51, 0.87, 0.43, 0.88, 0.77, 0.16, 0.74])
+    assert not verify.judge_photo(p)['lit']
+    d.rectangle((300, 330, 500, 400), fill=(0, 255, 60))                # now light some green LEDs on the panel
+    im.save(p)
+    r = verify.judge_photo(p, 'green')
+    assert r['lit'] and r['color_ok']

@@ -29,10 +29,23 @@ def judge_photo(path, color=None, sample=4):
     color_ok is None when no colour was requested. bbox is the lit region in full-frame pixel coordinates."""
     im = Image.open(path).convert('RGB')
     W, H = im.size
-    if W > H:                                       # a landscape viewfinder screenshot: the camera UI strip is on the right
-        im = im.crop((0, 0, int(W * 0.75), H))
+    from signboard import config
+    box = config.get('camera_panel_box')            # judge only the panel, not the room: a lit room, a door trim or a
+    if box and len(box) == 8:                       # reference ball next to the panel fooled the hue rules (2026-10-12)
+        # four corners (x, y fractions, any order around the panel): an obliquely seen panel is not a rectangle
+        from PIL import ImageDraw
+        pts = [(W * box[i], H * box[i + 1]) for i in range(0, 8, 2)]
+        mask = Image.new('L', (W, H), 0); ImageDraw.Draw(mask).polygon(pts, fill=255)
+        im = Image.composite(im, Image.new('RGB', (W, H)), mask)
+        ox, oy = int(min(p[0] for p in pts)), int(min(p[1] for p in pts))
+        im = im.crop((ox, oy, int(max(p[0] for p in pts)), int(max(p[1] for p in pts))))
+    elif box:                                       # [x0, y0, x1, y1]
+        ox, oy = int(W * box[0]), int(H * box[1])
+        im = im.crop((ox, oy, int(W * box[2]), int(H * box[3])))
+    elif W > H:                                     # a landscape viewfinder screenshot: the camera UI strip is on the right
+        ox = oy = 0; im = im.crop((0, 0, int(W * 0.75), H))
     else:                                           # portrait: shutter, mode row and the "Try Night Sight" pill sit in the bottom 38 %
-        im = im.crop((0, 0, W, int(H * 0.62)))
+        ox = oy = 0; im = im.crop((0, 0, W, int(H * 0.62)))
     im = im.resize((max(1, im.width // sample), max(1, im.height // sample)))
     bright = sat = clip = 0; hist = {}; xs = []; ys = []; vs = []
     mid = 0; mid_hist = {}; mxs = []; mys = []; mvs = []
@@ -59,7 +72,7 @@ def judge_photo(path, color=None, sample=4):
     if day:
         sat, xs, ys, vs, hist = mid, mxs, mys, mvs, mid_hist
     seen = max(hist, key=hist.get) if hist else None
-    bbox = [min(xs) * sample, min(ys) * sample, (max(xs) + 1) * sample, (max(ys) + 1) * sample] if sat >= 100 else None
+    bbox = [ox + min(xs) * sample, oy + min(ys) * sample, ox + (max(xs) + 1) * sample, oy + (max(ys) + 1) * sample] if sat >= 100 else None
     white = clip >= 150 and sat < 100
     out = {'lit': sat >= 100 or white, 'pixels': {'bright': bright, 'saturated': sat, 'clipped': clip, 'of': total, 'daylight': day},
            'color_seen': seen, 'hist': hist, 'white': white, 'bbox': bbox,

@@ -16,3 +16,6 @@ templates_dir = ""                    # where your imported RHX Plus templates l
 # latitude  = 0.0
 # longitude = 0.0
 max_brightness = 16                   # cap for automatic brightness (1..16)
+# camera_panel_box = [0.06, 0.36, 0.93, 0.82]  # where the panel sits in the camera's photos, as fractions: [x0, y0, x1, y1],
+#   or four corners [x, y, x, y, x, y, x, y] for a panel seen at an angle. Photo checks then ignore the room
+#   (a lit wall, door trim or a reference object next to the panel fooled them).

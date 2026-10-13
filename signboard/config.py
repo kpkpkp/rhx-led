@@ -19,6 +19,7 @@ DEFAULTS = {
     'sign_name': 'LED Sign',     # shown in the web UI and advertised over mDNS
     'allowed_hosts': [],         # extra host names signd answers to (it already accepts its LAN address and names)
     'max_brightness': 16,        # upper limit for automatic brightness (auto-light)
+    'camera_panel_box': None,    # panel in the camera photo, fractions: [x0, y0, x1, y1] or 4 corners [x, y, ...]
     'latitude': None,            # for sunrise/sunset brightness (signd --auto-light); None disables it
     'longitude': None,
 }
@@ -38,7 +39,7 @@ def _load():
     for k, v in DEFAULTS.items():
         env = os.environ.get('SIGNBOARD_' + k.upper())
         if env is not None:
-            cfg[k] = (float(env) if k in ('latitude', 'longitude') else int(env) if k == 'max_brightness'
+            cfg[k] = ([float(x) for x in env.split(',')] if k == 'camera_panel_box' else float(env) if k in ('latitude', 'longitude') else int(env) if k == 'max_brightness'
                       else [x.strip() for x in env.split(',') if x.strip()] if k in ('camera_models', 'allowed_hosts') else env)
     return cfg
 
