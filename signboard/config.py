@@ -40,6 +40,7 @@ def _load():
         env = os.environ.get('SIGNBOARD_' + k.upper())
         if env is not None:
             cfg[k] = ([float(x) for x in env.split(',')] if k == 'camera_panel_box' else float(env) if k in ('latitude', 'longitude') else int(env) if k == 'max_brightness'
+                      else env.strip().lower() not in ('0', 'false', 'no', 'off') if k == 'camera'
                       else [x.strip() for x in env.split(',') if x.strip()] if k in ('camera_models', 'allowed_hosts') else env)
     return cfg
 

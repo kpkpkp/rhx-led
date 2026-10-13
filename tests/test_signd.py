@@ -186,3 +186,36 @@ def test_picture_job(server):
     j = wait_job(port, j['id'])
     assert j['state'] == 'done', j.get('error')
     assert j['result']['mode'] == 'low-gray' and ctrl.image()[7] == 0x73
+
+
+# ---- no camera / auto-light ----------------------------------------------------------------------------------------
+
+def test_camera_false_skips_photos(monkeypatch):
+    from signboard import config
+    monkeypatch.setitem(config.CFG, 'camera', False)
+    out = signd.DirectBackend(emulated_sign(FakeController())).look({'latency': {}}, None)
+    assert out['camera'] == {'skipped': 'camera = false in config'}
+
+
+def test_auto_light_at_night(monkeypatch, tmp_path):
+    """Night: policy() gives level None; the site cap must not crash on it (2026-10-13: it did, every 5 min)."""
+    from signboard import config, daylight
+    monkeypatch.setitem(config.CFG, 'max_brightness', 1)
+    monkeypatch.setattr(config, 'state_file', lambda name: tmp_path / name)
+    (tmp_path / 'light.json').write_text('{"on": true, "level": 1}')
+    monkeypatch.setattr(daylight, 'solar_elevation', lambda: (-30.0, False))
+    submitted = []
+
+    class Stop(Exception):
+        pass
+
+    def sleep(_):
+        raise Stop
+    monkeypatch.setattr(signd.time, 'sleep', sleep)
+    printed = []
+    monkeypatch.setattr('builtins.print', lambda *a, **k: printed.append(' '.join(map(str, a))))
+    jobs = type('J', (), {'submit': lambda self, kind, a: submitted.append((kind, a))})()
+    with pytest.raises(Stop):
+        signd.auto_light(jobs)
+    assert not any('error' in p for p in printed), printed
+    assert submitted == [('power', {'on': False, 'verify': False})]

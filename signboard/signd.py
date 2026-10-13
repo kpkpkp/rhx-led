@@ -204,6 +204,9 @@ class DirectBackend:
         return out
 
     def look(self, out, color, t0=None):
+        if config.get('camera') is False:
+            out['camera'] = {'skipped': 'camera = false in config'}
+            return out
         try:
             photo = self.camera().take(str(PHOTO_DIR / f'{int(time.time())}.jpg'))
             out['photo'] = photo
@@ -373,7 +376,7 @@ def auto_light(jobs):
         try:
             e, morning = solar_elevation()
             on, level = policy(e, morning)
-            level = min(level, int(config.get('max_brightness') or 16))   # site cap (signboard.config)
+            if level is not None: level = min(level, int(config.get('max_brightness') or 16))   # site cap (signboard.config)
             tgt = {'on': on, 'level': level}
             if tgt != last:
                 print(f'auto-light: sun {e:.1f} deg -> {tgt} (was {last})')
@@ -507,10 +510,11 @@ def make_handler(jobs: Jobs, reads, sched=None):
                 except Exception as e: return self._json(502, {'error': str(e)})
             if p == '/api/health':
                 try:
+                    if config.get('camera') is False: raise RuntimeError('disabled in config')
                     from signboard.camera import find_serial
                     cam_serial = jobs.direct.camera_serial or find_serial(); cam = 'ok'
                 except Exception as e:
-                    cam_serial, cam = None, f'offline: {e}'
+                    cam_serial, cam = None, ('disabled' if config.get('camera') is False else f'offline: {e}')
                 return self._json(200, {'writer': 'direct', 'sign': 'ok' if not getattr(reads, 'err', None) else reads.err,
                                         'camera': cam, 'name': config.get('sign_name'), 'queue': jobs.q.qsize(), 'last_job': jobs.last,
                                         'read_error': getattr(reads, 'err', None)})

@@ -6,6 +6,7 @@ sign_address  = "AA:BB:CC:DD:EE:FF"   # BLE address of your RHX controller (a bl
 sign_password = ""                    # your controller password. Change the factory default in the RHX app first.
 
 # Optional: a phone on adb used as a camera to verify what the sign shows (Google Camera).
+# camera = false                     # no camera points at the panel: signd skips photo checks
 camera_serial = ""                    # adb serial or part of it; empty = the only attached adb device
 camera_models = []                    # or match by adb device name, e.g. ["walleye"] for a Pixel 2
 
