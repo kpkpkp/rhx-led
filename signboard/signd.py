@@ -115,6 +115,23 @@ class SignState:
             tmp.replace(self.path)
 
 
+def keep_panel_only(photo, pad=0.15):
+    """Crop a saved photo to the panel (camera_panel_box plus a margin) once it has been judged: the camera sees a room
+    with people in it, and only the panel is evidence. No box configured: the photo is kept as taken."""
+    box = config.get('camera_panel_box')
+    if not box:
+        return
+    from PIL import Image
+    with Image.open(photo) as im:
+        W, H = im.size
+        xs, ys = box[0::2], box[1::2]
+        x0, x1, y0, y1 = min(xs) * W, max(xs) * W, min(ys) * H, max(ys) * H
+        px, py = (x1 - x0) * pad, (y1 - y0) * pad * 2
+        crop = im.crop((max(0, int(x0 - px)), max(0, int(y0 - py)), min(W, int(x1 + px)), min(H, int(y1 + py))))
+        crop.load()
+    crop.save(photo, quality=92)
+
+
 class Jobs:
     MAX_KEPT = 200                           # finished jobs kept for /api/jobs
 
@@ -269,6 +286,7 @@ class DirectBackend:
             photo = self.camera().take(str(PHOTO_DIR / f'{int(time.time())}.jpg'))
             out['photo'] = photo
             out['camera'] = _judge(photo, color)
+            keep_panel_only(photo)
             if t0:
                 out['latency']['photo_s'] = round(time.time() - t0, 2)
         except Exception as e:
@@ -512,13 +530,24 @@ def make_handler(jobs: Jobs, reads, sched=None):
             netloc = (self.headers.get('Host') or '').strip().lower()
             host = netloc if netloc.endswith(']') else re.sub(r':\d+$', '', netloc)   # a bare [::1] has no port
             if host and not host_allowed(host):
-                self._json(421, {'error': f'unknown host {host!r}; add it to allowed_hosts in signboard.config'})
-                return False
+                return self._refuse(421, f'unknown host {host!r}; add it to allowed_hosts in signboard.config')
             origin = self.headers.get('Origin')
             if origin and origin.split('://', 1)[-1].rstrip('/').lower() != netloc:   # same origin = same host *and* port
-                self._json(403, {'error': 'cross-site request refused'})
-                return False
+                return self._refuse(403, 'cross-site request refused')
             return True
+
+        def _refuse(self, code, error):
+            # read a small unread body first: answering and closing with request bytes still unread makes Windows reset
+            # the connection, and the client never sees the refusal (seen as a flaky test, 2026-10-13)
+            try:
+                n = int(self.headers.get('Content-Length') or 0)
+            except ValueError:
+                n = 0
+            if 0 < n <= 64 * 1024:
+                self.rfile.read(n)
+            self.close_connection = True
+            self._json(code, {'error': error})
+            return False
 
         def _body(self):
             try:

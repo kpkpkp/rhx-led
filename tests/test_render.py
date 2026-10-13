@@ -142,3 +142,28 @@ def test_photo_check_ignores_things_outside_the_panel(tmp_path, monkeypatch):
     im.save(p)
     r = verify.judge_photo(p, 'green')
     assert r['lit'] and r['color_ok']
+
+
+def test_photo_check_small_dim_panel(tmp_path, monkeypatch):
+    """Camera across the room, exposed for the room: the panel is small and its LEDs photograph dim (60-130)."""
+    from PIL import ImageDraw
+    from signboard import config, verify
+    monkeypatch.setitem(config.CFG, 'camera_panel_box', [0.41, 0.40, 0.62, 0.48])
+    im = Image.new('RGB', (2000, 1500), (225, 225, 220))               # bright tiled kitchen
+    d = ImageDraw.Draw(im)
+    d.rectangle((820, 600, 1240, 720), fill=(28, 28, 28))               # the dark panel face
+    p = tmp_path / 'far.jpg'; im.save(p)
+    assert not verify.judge_photo(p)['lit']
+    d.rectangle((900, 630, 1150, 690), fill=(35, 95, 60))               # dim green text
+    im.save(p)
+    r = verify.judge_photo(p, 'green')
+    assert r['lit'] and r['color_ok']
+
+
+def test_saved_photo_keeps_only_the_panel(tmp_path, monkeypatch):
+    from signboard import config, signd
+    monkeypatch.setitem(config.CFG, 'camera_panel_box', [0.4, 0.4, 0.6, 0.5])
+    p = tmp_path / 'room.jpg'; Image.new('RGB', (1000, 1000), (200, 200, 200)).save(p)
+    signd.keep_panel_only(p)
+    w, h = Image.open(p).size
+    assert w == 260 and h == 160                                        # box 200 x 100 plus 15 % / 30 % margins

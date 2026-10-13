@@ -47,34 +47,42 @@ def judge_photo(path, color=None, sample=4):
     else:                                           # portrait: shutter, mode row and the "Try Night Sight" pill sit in the bottom 38 %
         ox = oy = 0; im = im.crop((0, 0, W, int(H * 0.62)))
     im = im.resize((max(1, im.width // sample), max(1, im.height // sample)))
+    face = None
+    if box:                                         # the panel's own face, bezel excluded: dark when off (2026-10-13, P2 at
+        fw, fh = im.width, im.height                # ~12 ft, camera exposed for the room: off face max <= ~31, lit LEDs 60-130)
+        f = im.crop((int(fw * 0.06), int(fh * 0.15), max(int(fw * 0.94), 1), max(int(fh * 0.85), 1))).convert('L')
+        face = sum(1 for v in f.getdata() if v > 60) / max(1, f.width * f.height)
     bright = sat = clip = 0; hist = {}; xs = []; ys = []; vs = []
     mid = 0; mid_hist = {}; mxs = []; mys = []; mvs = []
     w = im.width
+    lo, s_led = (60, 0.4) if box else (170, 0.5)   # inside a known panel box the face is dark when off, so dim LEDs count
     for i, (r, g, b) in enumerate(im.getdata()):
         m = max(r, g, b)
-        if m < 170: continue
+        if m < lo: continue
         h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
         bright += 1
         if m >= 245: clip += 1                     # near-clipping: LEDs do this, a lit wall does not
         n = _name(h)
-        if s >= 0.5:                               # night: LEDs at s 0.6-1.0, warm walls under room light at 0.2-0.4
+        if s >= s_led:                             # night: LEDs at s 0.6-1.0, warm walls under room light at 0.2-0.4
             sat += 1; xs.append(i % w); ys.append(i // w); vs.append(v)
             if n: hist[n] = hist.get(n, 0) + 1
         elif s >= 0.25:                            # daylight: the same LEDs photograph washed out, s 0.1-0.4
             mid += 1; mxs.append(i % w); mys.append(i // w); mvs.append(v)
             if n: mid_hist[n] = mid_hist.get(n, 0) + 1
     total = im.width * im.height
+    need = min(100, max(20, total // 100)) if box else 100     # a small panel in the photo has fewer LED pixels
     # daylight rule: a small (not wall-sized), hue-concentrated washed-out population is the sign
     day = False
-    if sat < 100 and 150 <= mid <= total * 0.25 and mid_hist:
+    if sat < need and min(150, need * 3 // 2) <= mid <= total * (0.6 if box else 0.25) and mid_hist:
         top = max(mid_hist.values())
         day = top >= 0.6 * sum(mid_hist.values())
     if day:
         sat, xs, ys, vs, hist = mid, mxs, mys, mvs, mid_hist
     seen = max(hist, key=hist.get) if hist else None
-    bbox = [ox + min(xs) * sample, oy + min(ys) * sample, ox + (max(xs) + 1) * sample, oy + (max(ys) + 1) * sample] if sat >= 100 else None
-    white = clip >= 150 and sat < 100
-    out = {'lit': sat >= 100 or white, 'pixels': {'bright': bright, 'saturated': sat, 'clipped': clip, 'of': total, 'daylight': day},
+    bbox = [ox + min(xs) * sample, oy + min(ys) * sample, ox + (max(xs) + 1) * sample, oy + (max(ys) + 1) * sample] if sat >= need else None
+    white = clip >= min(150, need * 3 // 2) and sat < need
+    lit = sat >= need or white or (face is not None and face >= 0.05)
+    out = {'lit': lit, 'face_lit': None if face is None else round(face, 3), 'pixels': {'bright': bright, 'saturated': sat, 'clipped': clip, 'of': total, 'daylight': day},
            'color_seen': seen, 'hist': hist, 'white': white, 'bbox': bbox,
            'brightness': round(sum(vs) / len(vs), 2) if vs else 0.0}
     if color:
