@@ -114,7 +114,17 @@ class Camera:
             time.sleep(2)                        # exposure settles
 
     def take(self, path, timeout=20) -> str:
-        """Shoot one photo and save the full-resolution JPEG at path. Returns the path."""
+        """Shoot one photo and save the full-resolution JPEG at path. Returns the path.
+        The screen goes off again afterwards (the phone runs on battery; ready() wakes it for the next photo)."""
+        try:
+            return self._take(path, timeout)
+        finally:
+            try:
+                self.sh('input', 'keyevent', 'KEYCODE_SLEEP')
+            except Exception:
+                pass
+
+    def _take(self, path, timeout=20) -> str:
         self.ready()
         before = self._listing()
         x, y = self._find_shutter()
