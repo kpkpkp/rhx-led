@@ -851,7 +851,8 @@ def lan_ip():
     import socket
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s.connect(('192.0.2.1', 9))         # TEST-NET address: no packet is sent, the OS just picks the outbound interface; return s.getsockname()[0]
+        # TEST-NET address: no packet is sent, the OS just picks the outbound interface
+        s.connect(('192.0.2.1', 9)); return s.getsockname()[0]
     finally:
         s.close()
 

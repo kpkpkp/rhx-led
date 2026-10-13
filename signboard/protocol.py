@@ -88,7 +88,7 @@ def auth_response_frame(resp_16b: bytes) -> bytes:
     return frame(0x89, b'\xa1\x10' + resp_16b)
 
 
-def login(request, password: str = None, upload_size: int = 100) -> bool:
+def login(request, password: str = None, upload_size: int = 0) -> bool:
     """
     password: the controller password (default: signboard.config "sign_password").
     Performs full 2-step challenge-response authentication against the RHX8-Q1C controller.
