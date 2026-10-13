@@ -254,7 +254,7 @@ footer{text-align:center;font-size:12px;color:var(--mut);padding-top:4px}
         <option value="low-gray">Low gray: 4 levels per colour</option>
         <option value="middle-gray">Middle gray: 16 levels, best for faces</option>
         <option value="high-gray">High gray: 64 levels, smooth colour</option>
-        <option value="true-color">True color: 256 levels, 96 px wide</option>
+        <option value="true-color">True color: 256 levels, 64 px wide (centred)</option>
       </select>
       <label class="small" style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="picStill"> Hold still (don't scroll)</label>
       <div class="picrec small" id="picRec" hidden></div>
@@ -934,7 +934,7 @@ $('picFile').addEventListener('change', async () => {
     PIC.rec = r;
     if (r.stored && PIC.file === f) { PIC.stored = r.stored; savePrefs({ picStored: r.stored, picName: f.name }); }
     box.innerHTML = (r.message ? esc(r.message) : 'Best mode: <strong>' + esc(r.label) + '</strong> (' + esc(r.reason) + ').') +
-      (r.mode === 'true-color' ? '' : ' <span class="mut">True color is limited to 96 px wide.</span>');
+      (r.mode === 'true-color' ? '' : ' <span class="mut">True color shows 64 px wide, centred between black bars.</span>');
     const opt = $('picMode').querySelector('option[value=auto]'); opt.textContent = 'Auto (best fit: ' + r.label + ')';
   } catch (err) {
     box.innerHTML = '<span class="mut">' + esc(err.network ? 'Couldn’t reach signd.' : 'No recommendation: ' + err.message) + '</span>';

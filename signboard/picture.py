@@ -85,15 +85,22 @@ def _zip_row(r):
     return bytes(o)
 
 
+PANEL_W = 128
+
+
 def fit(img, width, scale=1.0):
-    """Scale to the mode's width (times `scale`, centred), pad to whole 32-row bands. Returns (picture, frame)."""
+    """Scale to the mode's width (times `scale`, centred), pad to whole 32-row bands. Returns (picture, frame).
+    A program narrower than the panel (96: true colour, seven-colour lengthen) is drawn on the panel's right columns,
+    and the left 128 - width columns repeat its last ones (scan wrap, see docs). So the picture goes into the first
+    2 * width - 128 columns and the rest stays black: on the panel it sits centred between two black side bars."""
     img = ImageOps.exif_transpose(img).convert('RGB')
-    w = max(8, round(width * scale))
+    room = width if width >= PANEL_W else max(8, 2 * width - PANEL_W)
+    w = max(8, round(room * scale))
     h = max(1, round(img.height * w / img.width))
     small = img.resize((w, h), Image.LANCZOS)
     H = max(32, (h + 31) // 32 * 32)
     pic = Image.new('RGB', (width, H))
-    pic.paste(small, ((width - w) // 2, (H - h) // 2 if h < 32 else 0))
+    pic.paste(small, ((room - w) // 2, (H - h) // 2 if h < 32 else 0))
     if H > 32:                                        # item 1 is the program's fixed background: a scrolling picture
         return pic, Image.new('RGB', (width, 32))     # passed over a still crop of itself (2026-10-13), so keep it black
     return pic, pic.copy()

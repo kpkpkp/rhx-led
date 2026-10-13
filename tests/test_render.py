@@ -167,3 +167,15 @@ def test_saved_photo_keeps_only_the_panel(tmp_path, monkeypatch):
     signd.keep_panel_only(p)
     w, h = Image.open(p).size
     assert w == 260 and h == 160                                        # box 200 x 100 plus 15 % / 30 % margins
+
+
+def test_narrow_mode_picture_leaves_the_wrapped_columns_black():
+    """A 96-wide program: the panel's left 32 columns repeat the program's last 32, so those stay black and the
+    picture fills the first 64, centred on the panel between two black bars."""
+    from signboard import picture
+    pic, frame = picture.fit(Image.new('RGB', (300, 100), (255, 255, 255)), 96)
+    assert pic.width == 96
+    assert pic.crop((64, 0, 96, pic.height)).getbbox() is None
+    assert pic.crop((0, 0, 64, pic.height)).getbbox() is not None
+    full, _ = picture.fit(Image.new('RGB', (300, 100), (255, 255, 255)), 128)
+    assert full.crop((96, 0, 128, full.height)).getbbox() is not None      # 128-wide modes use the whole width
