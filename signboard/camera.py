@@ -104,7 +104,7 @@ class Camera:
         if 'deviceLocked=1' in self.sh('dumpsys', 'trust'):
             raise RuntimeError('phone is locked with a PIN: unlock it and remove the screen lock')
         if not self._focus().startswith(GCAM):
-            self.sh('am', 'start', '-a', 'android.media.action.STILL_IMAGE_CAMERA')
+            self.sh('am', 'start', '-a', 'android.media.action.STILL_IMAGE_CAMERA', '-p', GCAM)   # -p: no app chooser if another camera app is installed
             for _ in range(10):
                 time.sleep(1)
                 if self._focus().startswith(GCAM):
