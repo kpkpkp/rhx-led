@@ -1,0 +1,18 @@
+# Copy to ~/.signboard.toml (or ./signboard.toml, or point $SIGNBOARD_CONFIG at it) and fill in.
+# Every key can also be set as an environment variable: SIGNBOARD_<KEY>, e.g. SIGNBOARD_SIGN_ADDRESS.
+# Never commit your filled-in copy (it is in .gitignore).
+
+sign_address  = "AA:BB:CC:DD:EE:FF"   # BLE address of your RHX controller (a bleak or nRF Connect scan shows it)  # scan:ok
+sign_password = ""                    # your controller password. Change the factory default in the RHX app first.
+
+# Optional: a phone on adb used as a camera to verify what the sign shows (Google Camera).
+camera_serial = ""                    # adb serial or part of it; empty = the only attached adb device
+camera_models = []                    # or match by adb device name, e.g. ["walleye"] for a Pixel 2
+
+state_dir     = "~/.signboard"        # photos, generated programs and signd state files
+templates_dir = ""                    # where your imported RHX Plus templates live; empty = signboard/templates/
+
+# Optional: sunrise/sunset brightness (signd --auto-light).
+# latitude  = 0.0
+# longitude = 0.0
+max_brightness = 16                   # cap for automatic brightness (1..16)

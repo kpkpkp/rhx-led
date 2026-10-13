@@ -1,0 +1,1062 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#16130f" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f5f1ea" media="(prefers-color-scheme: light)">
+<title>Kitchen Sign</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0907'/%3E%3Cg fill='%23f2a93b'%3E%3Ccircle cx='8' cy='12' r='2'/%3E%3Ccircle cx='14' cy='12' r='2'/%3E%3Ccircle cx='20' cy='12' r='2'/%3E%3Ccircle cx='8' cy='20' r='2'/%3E%3Ccircle cx='24' cy='20' r='2'/%3E%3Ccircle cx='14' cy='20' r='2'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f5f1ea;--surface:#fffdf9;--surface-2:#f8f3eb;--line:#e2dacd;--line-2:#d0c5b4;
+  --fg:#231e17;--mut:#665d50;--acc:#a65f0a;--acc-fg:#ffffff;--acc-soft:#fbefdc;--acc-ink:#7a4606;
+  --ok:#13683a;--ok-soft:#dff3e6;--bad:#a3271b;--bad-soft:#fbe3e0;--warn:#8a5a00;--warn-soft:#fbf1d6;
+  --panel:#0a0907;--shadow:0 1px 2px rgba(60,40,10,.06),0 4px 16px rgba(60,40,10,.05);
+  --mono:ui-monospace,"Cascadia Mono","SF Mono",Consolas,"DejaVu Sans Mono",monospace;
+  --sans:ui-sans-serif,"Segoe UI Variable Text","Segoe UI",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#16130f;--surface:#1d1913;--surface-2:#221e18;--line:#332d25;--line-2:#4a4236;
+    --fg:#ece6dc;--mut:#a39a8c;--acc:#f2a93b;--acc-fg:#1a1408;--acc-soft:#2b2216;--acc-ink:#ffc56b;
+    --ok:#6fdb98;--ok-soft:#173323;--bad:#ff8f84;--bad-soft:#3a1a17;--warn:#f2c04b;--warn-soft:#332811;
+    --panel:#0a0907;--shadow:none;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16130f;--surface:#1d1913;--surface-2:#221e18;--line:#332d25;--line-2:#4a4236;
+  --fg:#ece6dc;--mut:#a39a8c;--acc:#f2a93b;--acc-fg:#1a1408;--acc-soft:#2b2216;--acc-ink:#ffc56b;
+  --ok:#6fdb98;--ok-soft:#173323;--bad:#ff8f84;--bad-soft:#3a1a17;--warn:#f2c04b;--warn-soft:#332811;
+  --panel:#0a0907;--shadow:none;color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 var(--sans);-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+button:disabled{cursor:not-allowed;opacity:.55}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.wrap{max-width:1120px;margin:0 auto;padding:20px 16px 48px;padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right));display:flex;flex-direction:column;gap:16px}
+@media (min-width:720px){.wrap{padding-top:28px;gap:20px}}
+
+/* header */
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+h1{margin:0;font-size:18px;letter-spacing:.14em;font-weight:700}
+.sub{font:12px var(--mono);color:var(--mut)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:13px;white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--line-2);flex:none}
+.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}.dot.warn{background:var(--warn)}
+.iconbtn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 11px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:13px}
+.iconbtn svg{width:15px;height:15px}
+
+/* banner */
+.banner{display:none;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:12px;background:var(--bad-soft);color:var(--bad);font-size:14px}
+.banner.show{display:flex}
+.banner.warn{background:var(--warn-soft);color:var(--warn)}
+.banner b{font-weight:600}
+
+/* cards */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);min-width:0}
+@media (max-width:480px){.card{padding:14px;border-radius:14px}}
+h2{margin:0;font-size:12px;letter-spacing:.12em;color:var(--mut);font-weight:600;text-transform:uppercase}
+.cardhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;min-height:24px}
+.row{display:flex;flex-wrap:wrap;gap:16px}
+@media (min-width:720px){.row{gap:20px}}
+.col-3{flex:3 1 460px;min-width:0}.col-2{flex:2 1 300px;min-width:0}
+.mut{color:var(--mut)}.small{font-size:13px}.tiny{font-size:12px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* LED */
+.stage{background:var(--panel);border-radius:16px;padding:14px;border:1px solid #2a251e}
+@media (max-width:480px){.stage{padding:8px;border-radius:12px}}
+.led{display:block;width:100%;aspect-ratio:4/1;border-radius:4px;background:#060504;image-rendering:auto}
+.stagecap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;margin-top:10px;font-size:13px;color:#a39a8c}
+.stagecap .mono{font-size:12px}
+.stale{color:#f2c04b}
+
+/* composer */
+.field{width:100%;font-size:18px;padding:12px 14px;border-radius:10px;border:1px solid var(--line-2);background:var(--surface-2);color:var(--fg);min-height:48px}
+.field::placeholder{color:var(--mut)}
+.swatches{display:grid;grid-template-columns:repeat(8,minmax(0,44px));gap:8px;margin:12px 0}
+.sw{position:relative;width:100%;height:auto;aspect-ratio:1;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line-2);padding:0;flex:none}
+.sw[aria-pressed="true"],.sw.sel{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--fg)}
+.sw.custom{background:conic-gradient(#ff3b30,#ffd23e,#30e070,#30e0e0,#3d7dff,#ff40d0,#ff3b30)}
+.sw.custom input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;border:0;padding:0}
+.preview{margin:4px 0 12px;background:var(--panel);border-radius:10px;padding:8px}
+.preview .led{border-radius:3px}
+.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line-2);background:transparent;font-weight:500;display:inline-flex;align-items:center;gap:8px;justify-content:center}
+.btn:hover:not(:disabled){background:var(--surface-2)}
+.btn.primary{background:var(--acc);border-color:var(--acc);color:var(--acc-fg);font-weight:700;padding:0 22px}
+.btn.primary:hover:not(:disabled){filter:brightness(1.06);background:var(--acc)}
+.btn.on{border-color:var(--acc);background:var(--acc-soft);color:var(--acc-ink);font-weight:600}
+.btn svg{width:16px;height:16px}
+.picgrid{display:flex;flex-wrap:wrap;gap:16px}
+.picprev{flex:3 1 300px;min-height:120px;max-height:320px;display:flex;align-items:center;justify-content:center;background:#000;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+.picprev img{max-width:100%;max-height:320px;object-fit:contain;image-rendering:auto}
+.picprev .empty{padding:16px;text-align:center}
+.picside{flex:2 1 240px;min-width:0}
+.picrec{margin-top:12px;padding:10px 12px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line)}
+.picrec strong{color:var(--fg)}
+.filechip{display:none;align-items:center;gap:8px;padding:6px 6px 6px 10px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line);font-size:13px;max-width:100%}
+.filechip.show{display:inline-flex}
+.filechip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.filechip button{border:0;background:transparent;width:32px;height:32px;border-radius:8px;color:var(--mut)}
+.status{margin-top:12px;display:none;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;font-size:14px}
+.status.show{display:flex}
+.status.run{background:var(--acc-soft);color:var(--acc-ink)}
+.status.ok{background:var(--ok-soft);color:var(--ok)}
+.status.bad{background:var(--bad-soft);color:var(--bad)}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .9s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none;border-right-color:currentColor;opacity:.6}}
+
+/* controls */
+.seg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.range{width:100%;accent-color:var(--acc);height:32px;margin:6px 0 2px}
+.rangelbl{display:flex;justify-content:space-between;align-items:baseline;margin-top:16px}
+.rangelbl strong{font:600 18px var(--mono);color:var(--fg)}
+.scale{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--mut)}
+
+/* photo */
+.photo{position:relative;display:block;aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:var(--panel);border:1px solid var(--line)}
+.photo img{width:100%;height:100%;object-fit:cover;display:block}
+.photo .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;color:#a39a8c;font-size:13px}
+.photometa{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+
+/* jobs */
+.jobs{list-style:none;margin:0;padding:0}
+.job{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 12px;align-items:start;padding:11px 0;border-top:1px solid var(--line)}
+.job:first-child{border-top:0;padding-top:2px}
+.job .t{font:12px var(--mono);color:var(--mut);padding-top:2px;min-width:58px}
+.job .what{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.job .meta{grid-column:2/4;font-size:12px;color:var(--mut);display:flex;flex-wrap:wrap;gap:2px 10px}
+.job .err{grid-column:2/4;font-size:12px;color:var(--bad);overflow-wrap:anywhere}
+.bar{grid-column:2/4;height:4px;border-radius:2px;background:var(--surface-2);display:flex;overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%}
+.bar .w{background:var(--line-2)}
+.bar .r{background:var(--acc)}
+.bar .r.bad{background:var(--bad)}
+.pill{font-size:12px;padding:2px 9px;border-radius:999px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.run{background:var(--acc-soft);color:var(--acc-ink)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.q{background:var(--surface-2);color:var(--mut)}
+.cdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 2px 0 6px;vertical-align:0;box-shadow:0 0 0 1px rgba(0,0,0,.25)}
+.legend{display:flex;gap:12px;font-size:11px;color:var(--mut)}
+.legend i{display:inline-block;width:10px;height:4px;border-radius:2px;margin-right:4px;vertical-align:middle}
+
+/* schedule */
+.sched{list-style:none;margin:0 0 12px;padding:0}
+.sched li{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.sched li:first-child{border-top:0}
+.sched .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.schedform{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+@media (min-width:560px){.schedform{grid-template-columns:130px minmax(0,1fr) 120px auto}}
+.schedform .field{font-size:16px;padding:10px 12px;min-height:44px}
+footer{text-align:center;font-size:12px;color:var(--mut);padding-top:4px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">
+    <h1>KITCHEN SIGN</h1>
+    <span class="sub" id="panelInfo">128×32 · RHX8-Q1C</span>
+  </div>
+  <div class="chips">
+    <span class="chip" id="chipSvc" title="signd service"><span class="dot"></span><span>connecting…</span></span>
+    <span class="chip" id="chipPhone" title="Camera phone that photographs the sign" hidden><span class="dot"></span><span></span></span>
+    <span class="chip" id="chipQueue" hidden><span class="dot warn"></span><span></span></span>
+    <button class="iconbtn" id="themeBtn" type="button" aria-label="Theme: auto">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>
+      <span id="themeLbl">Auto</span>
+    </button>
+  </div>
+</header>
+
+<div class="banner" id="banner" role="alert"></div>
+
+<section class="stage" aria-labelledby="nowTitle">
+  <h2 class="sr" id="nowTitle">On the sign now</h2>
+  <canvas class="led" id="ledNow" role="img" aria-label="Sign preview"></canvas>
+  <div class="stagecap">
+    <span id="nowCap">Reading the sign…</span>
+    <span class="mono" id="nowMeta"></span>
+  </div>
+</section>
+
+<div class="row">
+  <section class="card col-3" aria-labelledby="sendTitle">
+    <div class="cardhead"><h2 id="sendTitle">Send a message</h2><span class="tiny mut" id="charCount"></span></div>
+    <form id="sendForm" autocomplete="off">
+      <label for="msg" class="sr">Message</label>
+      <input id="msg" class="field" type="text" maxlength="60" placeholder="Dinner at 6:30" enterkeyhint="send">
+      <div class="swatches" id="swatches" role="group" aria-label="Color"></div>
+      <div class="preview" aria-hidden="false">
+        <canvas class="led" id="ledPreview" role="img" aria-label="Preview of your message"></canvas>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="sendBtn" type="submit">Send to sign</button>
+        <label class="btn" for="file" id="fileLbl">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-8 8"/></svg>
+          Background
+        </label>
+        <input id="file" type="file" accept="image/gif,image/png,.gif,.png" class="sr">
+        <span class="filechip" id="fileChip"><span id="fileName"></span><button type="button" id="fileClear" aria-label="Remove background image">✕</button></span>
+      </div>
+      <div class="tiny mut" id="fileNote" style="margin-top:8px" hidden></div>
+      <div class="status" id="sendStatus" role="status" aria-live="polite"></div>
+    </form>
+  </section>
+
+  <section class="card col-2" aria-labelledby="ctlTitle">
+    <div class="cardhead"><h2 id="ctlTitle">Power &amp; brightness</h2></div>
+    <div class="seg" role="group" aria-label="Power">
+      <button class="btn" type="button" id="pwrOn">On</button>
+      <button class="btn" type="button" id="pwrOff">Off</button>
+    </div>
+    <div class="tiny mut" id="pwrNote" style="margin-top:8px">&nbsp;</div>
+    <div class="rangelbl"><label for="bright" class="small mut">Brightness</label><span class="small mut"><strong id="brightVal">–</strong> / 16</span></div>
+    <input type="range" class="range" id="bright" min="1" max="16" step="1" value="8">
+    <div class="scale" aria-hidden="true"><span>1</span><span>8</span><span>16</span></div>
+    <div class="tiny mut" id="brightNote" style="margin-top:8px">Auto-light may change power and brightness at sunrise and sunset.</div>
+    <div class="status" id="ctlStatus" role="status" aria-live="polite"></div>
+  </section>
+</div>
+
+<section class="card" id="picCard" aria-labelledby="picTitle">
+  <div class="cardhead"><h2 id="picTitle">Show a picture</h2><span class="tiny mut" id="picSize"></span></div>
+  <div class="picgrid">
+    <div class="picprev" id="picPrev"><span class="empty small mut" id="picEmpty">Pick a photo or graphic. The sign shows it full-screen and scrolls tall pictures.</span><img id="picImg" alt="Picture to send" hidden></div>
+    <div class="picside">
+      <div class="actions" style="margin-top:0">
+        <label class="btn" for="picFile">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-8 8"/></svg>
+          Choose picture
+        </label>
+        <input id="picFile" type="file" accept="image/*" class="sr">
+      </div>
+      <label for="picMode" class="small mut" style="display:block;margin:12px 0 6px">Colour mode</label>
+      <select class="field" id="picMode">
+        <option value="auto">Auto (best fit)</option>
+        <option value="seven-lengthen">Seven colour: crisp text, logos</option>
+        <option value="low-gray">Low gray: 4 levels per colour</option>
+        <option value="middle-gray">Middle gray: 16 levels, best for faces</option>
+        <option value="high-gray">High gray: 64 levels, smooth colour</option>
+        <option value="true-color">True color: 256 levels, 96 px wide</option>
+      </select>
+      <label class="small" style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="picStill"> Hold still (don't scroll)</label>
+      <div class="picrec small" id="picRec" hidden></div>
+      <div class="actions"><button class="btn primary" id="picSend" type="button" disabled>Show on sign</button></div>
+      <div class="status" id="picStatus" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
+<section class="card" id="schedCard" aria-labelledby="schedTitle" hidden>
+  <div class="cardhead"><h2 id="schedTitle">Scheduled messages</h2></div>
+  <ul class="sched" id="schedList"></ul>
+  <form class="schedform" id="schedForm" autocomplete="off">
+    <label class="sr" for="schedAt">Time</label>
+    <input class="field" id="schedAt" type="time" required>
+    <label class="sr" for="schedText">Message</label>
+    <input class="field" id="schedText" type="text" maxlength="60" placeholder="Message" required>
+    <label class="sr" for="schedColor">Color</label>
+    <select class="field" id="schedColor"></select>
+    <button class="btn primary" type="submit">Schedule</button>
+  </form>
+  <div class="status" id="schedStatus" role="status" aria-live="polite"></div>
+</section>
+
+<div class="row">
+  <section class="card col-2" aria-labelledby="camTitle">
+    <div class="cardhead"><h2 id="camTitle">Latest photo</h2></div>
+    <a class="photo" id="photoLink" href="/api/camera" target="_blank" rel="noopener">
+      <img id="photo" alt="Latest camera photo of the sign" hidden>
+      <span class="empty" id="photoEmpty">Loading photo…</span>
+    </a>
+    <div class="photometa">
+      <span class="small mut" id="photoMeta"></span>
+      <button class="btn" type="button" id="lookBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        Take photo
+      </button>
+    </div>
+    <div class="status" id="lookStatus" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="card col-3" aria-labelledby="jobsTitle">
+    <div class="cardhead">
+      <h2 id="jobsTitle">Recent jobs</h2>
+      <span class="legend" aria-hidden="true"><span><i style="background:var(--line-2)"></i>waiting</span><span><i style="background:var(--acc)"></i>working</span></span>
+    </div>
+    <ul class="jobs" id="jobs"><li class="small mut">Loading…</li></ul>
+  </section>
+</div>
+
+<footer>signd · <span id="host"></span></footer>
+</div>
+
+<script>
+'use strict';
+/* ---------- helpers ---------- */
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nowS = () => Date.now() / 1000;
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+};
+const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// LED-ish colors for the named controller colors (what the panel looks like, not the UI palette)
+const NAMED = { white:'#fff8ec', red:'#ff2d22', green:'#2bff6a', yellow:'#ffe03a', blue:'#3a6bff', cyan:'#2af0f0', magenta:'#ff3ee0' };
+const ORDER = ['white','red','green','yellow','blue','cyan','magenta'];
+
+function toHex(r, g, b) { return '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, v | 0)).toString(16).padStart(2, '0')).join(''); }
+function colorCss(c) {
+  if (c == null || c === '') return NAMED.white;
+  const s = String(c).trim().toLowerCase();
+  if (NAMED[s]) return NAMED[s];
+  let m;
+  if ((m = s.match(/^#?([0-9a-f]{6})$/))) return '#' + m[1];
+  if ((m = s.match(/^#?[0-9a-f]{2}([0-9a-f]{6})$/))) return '#' + m[1];           // ARGB
+  if ((m = s.match(/^#?([0-9a-f])([0-9a-f])([0-9a-f])$/))) return '#' + m[1] + m[1] + m[2] + m[2] + m[3] + m[3];
+  if (/^-?\d+$/.test(s)) { const n = Number(s) >>> 0; return toHex((n >> 16) & 255, (n >> 8) & 255, n & 255); }
+  if ((m = s.match(/(\d+)\D+(\d+)\D+(\d+)/))) return toHex(+m[1], +m[2], +m[3]);
+  return NAMED.white;
+}
+function colorLabel(c) {
+  if (c == null || c === '') return '';
+  const s = String(c).trim().toLowerCase();
+  if (NAMED[s]) return s;
+  const hex = colorCss(c);
+  for (const k in NAMED) if (NAMED[k] === hex) return k;
+  return hex;
+}
+function rgb(hex) { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+
+function fmtDur(s) {
+  if (s == null || !isFinite(s)) return '';
+  s = Math.max(0, s);
+  if (s < 10) return s.toFixed(1).replace(/\.0$/, '') + ' s';
+  if (s < 60) return Math.round(s) + ' s';
+  const m = Math.floor(s / 60), r = Math.round(s % 60);
+  return m + ' m' + (r ? ' ' + r + ' s' : '');
+}
+function ago(t) {
+  if (!t) return '';
+  const d = nowS() - t;
+  if (d < 5) return 'just now';
+  if (d < 60) return Math.round(d) + ' s ago';
+  if (d < 3600) return Math.round(d / 60) + ' min ago';
+  if (d < 86400) return Math.round(d / 3600) + ' h ago';
+  return Math.round(d / 86400) + ' d ago';
+}
+function clock(t) {
+  const d = new Date(t * 1000);
+  const sameDay = new Date().toDateString() === d.toDateString();
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return sameDay ? time : d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + time;
+}
+
+/* ---------- network ---------- */
+const net = { ok: null, lastErr: '' };
+async function api(path, opts) {
+  opts = opts || {};
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), opts.timeout || 20000);
+  const init = { method: opts.method || 'GET', headers: Object.assign({}, opts.headers), signal: ctl.signal, cache: 'no-store' };
+  if (opts.json !== undefined) { init.body = JSON.stringify(opts.json); init.headers['Content-Type'] = 'application/json'; }
+  else if (opts.body !== undefined) init.body = opts.body;
+  let r;
+  try {
+    r = await fetch(path, init);
+  } catch (e) {
+    clearTimeout(timer);
+    const err = new Error(e && e.name === 'AbortError' ? 'request timed out' : 'cannot reach signd');
+    err.network = true;
+    setNet(false, err.message);
+    throw err;
+  }
+  clearTimeout(timer);
+  setNet(true);
+  let data = null;
+  const ct = r.headers.get('content-type') || '';
+  try {
+    if (ct.indexOf('json') >= 0) data = await r.json();
+    else { const t = await r.text(); data = t ? { raw: t } : null; }
+  } catch (e) { data = null; }
+  if (!r.ok) {
+    const msg = (data && (data.error || (data.raw && data.raw.slice(0, 200)))) || ('HTTP ' + r.status);
+    const err = new Error(msg); err.status = r.status; err.data = data;
+    throw err;
+  }
+  return data;
+}
+
+function setChip(el, cls, text, title) {
+  el.hidden = false;
+  el.querySelector('.dot').className = 'dot' + (cls ? ' ' + cls : '');
+  el.querySelector('span:last-child').textContent = text;
+  if (title !== undefined) el.title = title;
+}
+function setNet(ok, msg) {
+  if (net.ok === ok && ok) return;
+  net.ok = ok;
+  const b = $('banner');
+  if (ok) {
+    b.classList.remove('show');
+    setChip($('chipSvc'), 'ok', 'online', 'signd is answering');
+  } else {
+    net.lastErr = msg || '';
+    b.className = 'banner show';
+    b.innerHTML = '<div><b>Can’t reach the sign service.</b> ' + esc(msg || '') +
+      '. The laptop running signd may be asleep or off the Wi-Fi. Retrying automatically.</div>';
+    setChip($('chipSvc'), 'bad', 'offline', 'signd not answering');
+  }
+}
+
+/* ---------- LED panel renderer ---------- */
+const PW = 128, PH = 32;
+const panels = [];
+class Led {
+  constructor(canvas) {
+    this.c = canvas; this.ctx = canvas.getContext('2d');
+    this.mask = null; this.bg = null; this.color = rgb(NAMED.white);
+    this.offset = 0; this.scroll = false; this.dim = false;
+    panels.push(this);
+    if (window.ResizeObserver) new ResizeObserver(() => this.resize()).observe(canvas);
+    else window.addEventListener('resize', () => this.resize());
+    this.resize();
+  }
+  resize() {
+    const w = this.c.clientWidth || 512, dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const W = Math.max(128, Math.round(w * dpr));
+    if (this.c.width !== W) { this.c.width = W; this.c.height = Math.round(W / 4); }
+    this.draw();
+  }
+  set(o) {
+    let changed = false;
+    if ('text' in o || 'size' in o) {
+      const key = (o.text || '') + '|' + (o.size || '');
+      if (key !== this.key) { this.key = key; this.mask = o.text ? textMask(o.text, o.size) : null; changed = true; }
+    }
+    if ('color' in o) this.color = rgb(colorCss(o.color));
+    if ('bg' in o) this.bg = o.bg;
+    if ('dim' in o) this.dim = o.dim;
+    this.scroll = !!(this.mask && this.mask.w > PW && !reduceMotion);
+    if (changed) this.offset = 0;
+    this.draw();
+    kickAnim();
+  }
+  lit(x, y) {
+    const m = this.mask;
+    if (!m) return 0;
+    let tx;
+    if (this.scroll) { const period = m.w + 24; tx = Math.floor(x + this.offset) % period; }
+    else tx = m.w > PW ? x : x - Math.floor((PW - m.w) / 2);
+    if (tx < 0 || tx >= m.w) return 0;
+    return m.a[y * m.w + tx];
+  }
+  draw() {
+    const ctx = this.ctx, W = this.c.width, H = this.c.height, p = W / PW, r = p * 0.36;
+    ctx.fillStyle = '#060504'; ctx.fillRect(0, 0, W, H);
+    const [cr, cg, cb] = this.color, k = this.dim ? 0.45 : 1;
+    const on = [], unlit = new Path2D(), glow = new Path2D(), bgDots = [];
+    for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
+      const cx = (x + 0.5) * p, cy = (y + 0.5) * p;
+      const a = this.lit(x, y);
+      if (a > 110) { on.push(cx, cy); glow.moveTo(cx + p * 0.9, cy); glow.arc(cx, cy, p * 0.9, 0, 6.2832); continue; }
+      if (this.bg) {
+        const i = (y * PW + x) * 4, br = this.bg[i], bg = this.bg[i + 1], bb = this.bg[i + 2], ba = this.bg[i + 3];
+        if (ba > 100 && br + bg + bb > 60) { bgDots.push(cx, cy, br, bg, bb); continue; }
+      }
+      unlit.moveTo(cx + r, cy); unlit.arc(cx, cy, r, 0, 6.2832);
+    }
+    ctx.fillStyle = '#1c1915'; ctx.fill(unlit);
+    for (let i = 0; i < bgDots.length; i += 5) {
+      ctx.fillStyle = 'rgb(' + (bgDots[i + 2] * k | 0) + ',' + (bgDots[i + 3] * k | 0) + ',' + (bgDots[i + 4] * k | 0) + ')';
+      ctx.beginPath(); ctx.arc(bgDots[i], bgDots[i + 1], r, 0, 6.2832); ctx.fill();
+    }
+    if (on.length) {
+      ctx.globalAlpha = this.dim ? 0.06 : 0.14;
+      ctx.fillStyle = 'rgb(' + cr + ',' + cg + ',' + cb + ')'; ctx.fill(glow);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgb(' + (cr * k | 0) + ',' + (cg * k | 0) + ',' + (cb * k | 0) + ')';
+      const lp = new Path2D();
+      for (let i = 0; i < on.length; i += 2) { lp.moveTo(on[i] + r * 1.08, on[i + 1]); lp.arc(on[i], on[i + 1], r * 1.08, 0, 6.2832); }
+      ctx.fill(lp);
+    }
+  }
+}
+function textMask(text, size) {
+  size = Math.max(6, Math.min(32, Number(size) || 22));
+  const font = '700 ' + size + 'px ' + getComputedStyle(document.documentElement).getPropertyValue('--mono');
+  const c = document.createElement('canvas'), x = c.getContext('2d');
+  x.font = font;
+  const w = Math.max(1, Math.ceil(x.measureText(text).width));
+  c.width = w; c.height = PH;
+  x.font = font; x.textBaseline = 'middle'; x.fillStyle = '#fff';
+  x.fillText(text, 0, PH / 2 + 1);
+  const d = x.getImageData(0, 0, w, PH).data, a = new Uint8Array(w * PH);
+  for (let i = 0; i < a.length; i++) a[i] = d[i * 4 + 3];
+  return { w, a };
+}
+let animOn = false, lastT = 0;
+function kickAnim() {
+  if (animOn || document.hidden || !panels.some((p) => p.scroll)) return;
+  animOn = true; lastT = 0;
+  requestAnimationFrame(tick);
+}
+function tick(t) {
+  if (document.hidden || !panels.some((p) => p.scroll)) { animOn = false; return; }
+  if (!lastT) lastT = t;
+  const dt = t - lastT;
+  if (dt >= 40) {                                  // ~25 fps is plenty for a marquee
+    lastT = t;
+    for (const p of panels) if (p.scroll) { p.offset += dt / 1000 * 22; p.draw(); }
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ---------- theme ---------- */
+const THEMES = ['auto', 'light', 'dark'];
+let theme = store.get('sign-theme') || 'auto';
+function applyTheme() {
+  if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', theme);
+  const lbl = theme[0].toUpperCase() + theme.slice(1);
+  $('themeLbl').textContent = lbl;
+  $('themeBtn').setAttribute('aria-label', 'Theme: ' + lbl + '. Change theme');
+}
+$('themeBtn').addEventListener('click', () => {
+  theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+  store.set('sign-theme', theme); applyTheme();
+});
+applyTheme();
+
+/* ---------- state ---------- */
+const S = {
+  now: null, nowErr: null, nowAt: 0,
+  health: null,
+  jobs: [], tracked: new Map(),
+  color: store.get('sign-color') || 'green',
+  file: null, fileBg: null,
+  photoName: null, photoUrl: null,
+  schedule: null
+};
+const ledNow = new Led($('ledNow'));
+const ledPrev = new Led($('ledPreview'));
+$('host').textContent = location.host || 'local file';
+
+/* ---------- /api/now ---------- */
+async function refreshNow() {
+  try {
+    const n = await api('/api/now', { timeout: 35000 });
+    S.now = n; S.nowErr = null; S.nowAt = nowS();
+    ledNow.set({ text: n.text || '', color: n.color, size: n.font_size, dim: false });
+    if (n.panel && n.panel.width) $('panelInfo').textContent = n.panel.width + '×' + n.panel.height + ' · RHX8-Q1C';
+  } catch (e) {
+    S.nowErr = e.network ? null : e.message;
+    if (S.now) ledNow.set({ dim: true });
+  }
+  renderNowCap();
+}
+function renderNowCap() {
+  const n = S.now, cap = $('nowCap'), meta = $('nowMeta');
+  $('ledNow').setAttribute('aria-label', n && n.text ? 'The sign shows: ' + n.text : 'Sign preview');
+  if (!n) {
+    cap.innerHTML = S.nowErr ? '<span class="stale">Can’t read the sign: ' + esc(S.nowErr) + '</span>' : (net.ok === false ? 'Waiting for signd…' : 'Reading the sign…');
+    meta.textContent = '';
+    return;
+  }
+  const at = n.read_at || S.nowAt;
+  let s = n.text ? 'On the sign now' : 'The sign holds no text';
+  s += ' · read from the controller ' + ago(at);
+  if (S.nowErr) s = '<span class="stale">Showing the last read (' + ago(at) + '). Latest read failed: ' + esc(S.nowErr) + '</span>';
+  else s = esc(s);
+  cap.innerHTML = s;
+  const bits = [];
+  if (n.color) bits.push(colorLabel(n.color));
+  if (n.font_size) bits.push(n.font_size + 'px');
+  if (n.font) bits.push(n.font);
+  if (n.background && !/^(0|none|null)?$/i.test(String(n.background))) bits.push('bg ' + n.background);
+  meta.textContent = bits.join(' · ');
+}
+
+/* ---------- /api/health ---------- */
+async function refreshHealth() {
+  try {
+    const h = await api('/api/health', { timeout: 30000 });
+    S.health = h;
+    const ph = String(h.phone || '');
+    S.direct = h.writer === 'direct';
+    if (S.direct) {
+      // signd drives the sign itself; the phone only takes verification photos
+      const cam = String(h.camera || '');
+      if (cam === 'ok') setChip($('chipPhone'), 'ok', 'camera ok', 'The shelf phone photographs the sign to check each change. Not needed to control it.');
+      else setChip($('chipPhone'), 'warn', 'no camera', 'Camera phone offline: changes still go to the sign, they just are not photographed. ' + cam);
+    }
+    else if (ph === 'ok') setChip($('chipPhone'), 'ok', 'phone ok', 'Shelf phone ' + (h.serial || '') + ' is ready');
+    else setChip($('chipPhone'), 'bad', ph.split(/[:(]/)[0].trim() || 'phone ?', ph);
+    const q = h.queue || 0;
+    if (q > 0) setChip($('chipQueue'), 'warn', q + ' queued'); else $('chipQueue').hidden = true;
+    const b = $('banner');
+    if (net.ok && !S.direct && /locked/i.test(ph)) {
+      b.className = 'banner warn show';
+      b.innerHTML = '<div><b>The shelf phone is locked.</b> Messages can’t be sent until someone unlocks it and removes its screen lock.</div>';
+    } else if (net.ok && b.classList.contains('warn')) b.className = 'banner';
+  } catch (e) { /* banner handled by api() for network errors */ }
+}
+
+/* ---------- jobs ---------- */
+const ACTIVE = { queued: 1, running: 1, recovering: 1 };
+async function refreshJobs() {
+  try {
+    const js = await api('/api/jobs');
+    S.jobs = Array.isArray(js) ? js : (js && js.jobs) || [];
+    renderJobs();
+    syncControlsFromJobs();
+    maybeNewPhoto();
+  } catch (e) {
+    if (!S.jobs.length) $('jobs').innerHTML = '<li class="small mut">' + esc(e.network ? 'Waiting for signd…' : 'Couldn’t load jobs: ' + e.message) + '</li>';
+  }
+}
+function jobWhat(j) {
+  const a = j.args || {};
+  switch (j.kind) {
+    case 'text': return '“' + esc(a.text) + '”' + (a.color ? '<span class="cdot" style="background:' + esc(colorCss(a.color)) + '"></span><span class="mut small">' + esc(colorLabel(a.color)) + '</span>' : '') + (a.background ? ' <span class="mut small">+ ' + esc(a.background) + '</span>' : '');
+    case 'power': return a.on ? 'Power on' : 'Power off';
+    case 'brightness': return 'Brightness ' + esc(a.level);
+    case 'look': case 'camera': return 'Photo of the sign';
+    case 'readback': return 'Read back from sign';
+    case 'picture': return 'Picture <span class="mut small">' + esc(a.mode || 'auto') + (a.still ? ', still' : '') + '</span>';
+    case 'park': return 'Park phone';
+    default: return esc(j.kind);
+  }
+}
+function who(o) {
+  if (!o) return '';
+  if (o === 'auto-light') return 'auto-light';
+  if (o === 'internal') return 'signd';
+  if (o.indexOf('retry-of-') === 0) return 'automatic retry';
+  const sp = o.indexOf(' '), ip = sp > 0 ? o.slice(0, sp) : o, ua = sp > 0 ? o.slice(sp + 1) : '';
+  const dev = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' :
+    /Macintosh/.test(ua) ? 'Mac' : /curl/i.test(ua) ? 'curl' : /python|urllib|requests/i.test(ua) ? 'script' : /Linux/.test(ua) ? 'Linux' : '';
+  return dev ? dev + ' · ' + ip : ip;
+}
+function jobTimes(j) {
+  const q = j.queued_at, st = j.started_at, f = j.finished_at, t = nowS();
+  const wait = q ? ((st || (f ? f : t)) - q) : 0;
+  const run = st ? ((f || t) - st) : 0;
+  return { wait: Math.max(0, wait), run: Math.max(0, run), total: Math.max(0, wait + run) };
+}
+function verdict(j) {
+  const tt = jobTimes(j);
+  switch (j.state) {
+    case 'done': return ['ok', 'done ' + fmtDur(tt.total)];
+    case 'failed': return ['bad', 'failed' + (tt.total ? ' · ' + fmtDur(tt.total) : '')];
+    case 'running': return ['run', 'working ' + fmtDur(tt.run)];
+    case 'recovering': return ['warn', 'retrying ' + fmtDur(tt.run)];
+    case 'queued': return ['q', 'queued ' + fmtDur(tt.wait)];
+    default: return ['q', String(j.state || '?')];
+  }
+}
+function witnesses(j) {
+  const out = [], r = j.result || {}, c = r.camera, b = j.ble;
+  if (c && !c.error && c.lit !== undefined) {
+    let s = 'camera: ' + (c.lit ? 'lit' : 'dark');
+    if (c.color_seen) s += ', ' + c.color_seen;
+    if (c.color_ok === true || c.power_ok === true) s += ' ✓';
+    else if (c.color_ok === false || c.power_ok === false) s += ' ✗';
+    out.push(s);
+  } else if (c && c.error) out.push('camera: couldn’t judge');
+  if (b && b.state === 'pending') out.push('controller check: pending…');
+  else if (b && b.state === 'done') out.push('controller ' + (b.match ? 'matches ✓' : 'mismatch ✗' + (b.retry_job ? ', resent' : '')));
+  else if (b && b.state === 'failed') out.push('controller check failed');
+  if (r.direct_ble) out.push('via direct BLE');
+  return out;
+}
+function renderJobs() {
+  const list = S.jobs.filter((j) => j.kind !== 'park');
+  if (!list.length) { $('jobs').innerHTML = '<li class="small mut">Nothing sent yet.</li>'; return; }
+  const scale = Math.max(60, ...list.map((j) => jobTimes(j).total));
+  $('jobs').innerHTML = list.map((j) => {
+    const tt = jobTimes(j), v = verdict(j), w = witnesses(j), o = who(j.origin);
+    const meta = [];
+    if (tt.wait >= 1 && j.started_at) meta.push('waited ' + fmtDur(tt.wait));
+    if (j.started_at && j.finished_at) meta.push('ran ' + fmtDur(tt.run));
+    meta.push.apply(meta, w);
+    if (o) meta.push(o);
+    const wp = (tt.wait / scale * 100).toFixed(1), rp = (tt.run / scale * 100).toFixed(1);
+    return '<li class="job">' +
+      '<span class="t">' + esc(j.queued_at ? clock(j.queued_at) : '') + '</span>' +
+      '<span class="what">' + jobWhat(j) + '</span>' +
+      '<span class="pill ' + v[0] + '">' + esc(v[1]) + '</span>' +
+      '<span class="bar" aria-hidden="true"><i class="w" style="width:' + wp + '%"></i><i class="r' + (j.state === 'failed' ? ' bad' : '') + '" style="width:' + rp + '%"></i></span>' +
+      (meta.length ? '<span class="meta">' + meta.map((m) => '<span>' + esc(m) + '</span>').join('') + '</span>' : '') +
+      (j.error ? '<span class="err">' + esc(j.error) + '</span>' : (j.retried && j.state !== 'failed' ? '<span class="meta"><span>recovered after: ' + esc(j.retried) + '</span></span>' : '')) +
+      '</li>';
+  }).join('');
+}
+function anyActive() { return S.jobs.some((j) => ACTIVE[j.state]) || S.tracked.size > 0; }
+
+/* track a job we submitted: poll /api/jobs/<id> (cheap, no BLE) until it settles */
+function track(job, onUpdate) {
+  if (!job || !job.id) return;
+  S.tracked.set(job.id, { onUpdate, job });
+  onUpdate(job);
+  scheduleTrack(1500);
+}
+let trackTimer = null;
+function scheduleTrack(ms) { clearTimeout(trackTimer); trackTimer = setTimeout(pollTracked, ms); }
+async function pollTracked() {
+  for (const [id, t] of Array.from(S.tracked)) {
+    try {
+      const j = await api('/api/jobs/' + encodeURIComponent(id));
+      t.job = j; t.onUpdate(j);
+      if (!ACTIVE[j.state]) { S.tracked.delete(id); refreshJobs(); }
+    } catch (e) {
+      if (e.status === 404) { S.tracked.delete(id); t.onUpdate(Object.assign({}, t.job, { state: 'failed', error: 'job no longer known to signd (restarted?)' })); }
+    }
+  }
+  if (S.tracked.size) scheduleTrack(2000);
+}
+function showStatus(el, cls, html) {
+  el.className = 'status show ' + cls;
+  el.innerHTML = (cls === 'run' ? '<span class="spin" aria-hidden="true"></span>' : '') + '<span>' + html + '</span>';
+}
+function hideStatus(el) { el.className = 'status'; el.innerHTML = ''; }
+function jobStatus(el, label, j) {
+  const tt = jobTimes(j);
+  if (j.state === 'queued') {
+    const ahead = S.jobs.filter((x) => ACTIVE[x.state] && x.id !== j.id && x.queued_at < j.queued_at).length;
+    showStatus(el, 'run', esc(label) + ' queued' + (ahead ? ' behind ' + ahead + ' other job' + (ahead > 1 ? 's' : '') : '') + '…');
+  } else if (j.state === 'running') showStatus(el, 'run', esc(label) + '… ' + fmtDur(tt.run) + ' <span class="mut">' + (S.direct
+      ? '(sending to the sign over Bluetooth, usually a few seconds; then a photo to check it)'
+      : '(the shelf phone is working on it; this usually takes under a minute)') + '</span>');
+  else if (j.state === 'recovering') showStatus(el, 'run', (S.direct ? 'Hit a snag, reconnecting to the sign and retrying… ' : 'Hit a snag, restarting the sign app and retrying… ') + fmtDur(tt.run));
+  else if (j.state === 'done') {
+    const w = witnesses(j);
+    showStatus(el, 'ok', esc(label) + ' done in ' + fmtDur(tt.total) + (w.length ? ' · ' + esc(w.join(' · ')) : ''));
+  } else if (j.state === 'failed') showStatus(el, 'bad', esc(label) + ' failed' + (j.error ? ': ' + esc(j.error) : '.'));
+}
+
+/* ---------- composer ---------- */
+function buildSwatches() {
+  const box = $('swatches');
+  box.innerHTML = ORDER.map((k) => '<button type="button" class="sw" data-c="' + k + '" style="background:' + NAMED[k] + '" aria-label="' + k + '" aria-pressed="false"></button>').join('') +
+    '<label class="sw custom" title="Custom color" data-c="custom"><span class="sr">Custom color</span><input type="color" id="customColor" value="#ff8800"></label>';
+  box.addEventListener('click', (e) => {
+    const b = e.target.closest('button.sw'); if (!b) return;
+    setColor(b.dataset.c);
+  });
+  $('customColor').addEventListener('input', (e) => setColor(e.target.value));
+  $('schedColor').innerHTML = ORDER.map((k) => '<option value="' + k + '">' + k + '</option>').join('');
+  $('schedColor').value = 'green';
+}
+function setColor(c) {
+  S.color = c; store.set('sign-color', c);
+  const named = !!NAMED[c];
+  document.querySelectorAll('#swatches button.sw').forEach((el) => el.setAttribute('aria-pressed', String(el.dataset.c === c)));
+  document.querySelector('#swatches .sw.custom').classList.toggle('sel', !named);
+  if (!named) $('customColor').value = colorCss(c);
+  updatePreview();
+}
+function updatePreview() {
+  const t = $('msg').value;
+  const ph = !t && !S.fileBg;   // empty: show the placeholder, dimmed
+  ledPrev.set({ text: t || (ph ? $('msg').placeholder : ''), color: S.color, size: S.now && S.now.font_size, bg: S.fileBg, dim: ph });
+  $('charCount').textContent = t.length ? (60 - t.length) + ' left' : '';
+  $('sendBtn').disabled = !t.trim();
+}
+$('msg').addEventListener('input', updatePreview);
+
+$('file').addEventListener('change', async () => {
+  const f = $('file').files[0];
+  $('file').value = '';
+  if (!f) return;
+  const note = $('fileNote');
+  if (!/\.(gif|png)$/i.test(f.name) && !/image\/(gif|png)/.test(f.type)) {
+    note.hidden = false; note.textContent = 'Pick a GIF or PNG (128×32).'; return;
+  }
+  try {
+    const { data, w, h } = await rasterize(f);
+    S.file = f; S.fileBg = data;
+    $('fileName').textContent = f.name; $('fileChip').classList.add('show');
+    note.hidden = false;
+    note.textContent = (w === PW && h === PH ? '128×32, a perfect fit.' : 'This image is ' + w + '×' + h + '; the sign is 128×32, so the preview scales it to fit.') +
+      (/gif/i.test(f.type) ? ' Animated GIFs preview their first frame.' : '');
+    updatePreview();
+  } catch (e) {
+    note.hidden = false; note.textContent = 'Couldn’t read that image: ' + e.message;
+  }
+});
+$('fileClear').addEventListener('click', () => {
+  S.file = null; S.fileBg = null;
+  $('fileChip').classList.remove('show'); $('fileNote').hidden = true;
+  updatePreview();
+});
+function rasterize(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = PW; c.height = PH;
+      const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
+      const s = Math.min(PW / img.naturalWidth, PH / img.naturalHeight);
+      const w = img.naturalWidth * s, h = img.naturalHeight * s;
+      x.drawImage(img, (PW - w) / 2, (PH - h) / 2, w, h);
+      URL.revokeObjectURL(url);
+      resolve({ data: x.getImageData(0, 0, PW, PH).data, w: img.naturalWidth, h: img.naturalHeight });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('not a readable image')); };
+    img.src = url;
+  });
+}
+
+$('sendForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = $('msg').value.trim();
+  if (!text) return;
+  const st = $('sendStatus'), btn = $('sendBtn');
+  btn.disabled = true;
+  try {
+    const body = { text, color: S.color, verify: true };
+    if (S.file) {
+      showStatus(st, 'run', 'Uploading ' + esc(S.file.name) + '…');
+      const name = S.file.name.replace(/[^A-Za-z0-9._-]/g, '_');
+      const up = await api('/api/image?name=' + encodeURIComponent(name), {
+        method: 'POST', body: S.file, timeout: 90000,
+        headers: { 'Content-Type': S.file.type || 'application/octet-stream', 'X-Name': name }
+      });
+      body.background = (up && ((up.use && up.use.background) || up.stored || up.name)) || name;
+    }
+    showStatus(st, 'run', 'Queuing…');
+    const job = await api('/api/text', { method: 'POST', json: body });
+    $('msg').value = ''; updatePreview();
+    track(job, (j) => jobStatus(st, 'Sending “' + text + '”', j));
+    refreshJobs();
+  } catch (err) {
+    showStatus(st, 'bad', esc(err.network ? 'Couldn’t reach signd, so nothing was sent. Check that you’re on the home Wi-Fi.' : err.message));
+  } finally {
+    btn.disabled = !$('msg').value.trim();
+  }
+});
+
+/* ---------- picture ---------- */
+const PIC = { file: null, rec: null };
+const PIC_LABELS = { 'seven-lengthen': 'Seven colour', 'low-gray': 'Low gray', 'middle-gray': 'Middle gray', 'high-gray': 'High gray', 'true-color': 'True color' };
+$('picFile').addEventListener('change', async () => {
+  const f = $('picFile').files && $('picFile').files[0];
+  if (!f) return;
+  PIC.file = f; PIC.rec = null;
+  const img = $('picImg'); img.src = URL.createObjectURL(f); img.hidden = false; $('picEmpty').hidden = true;
+  img.onload = () => { $('picSize').textContent = f.name + ' · ' + img.naturalWidth + '×' + img.naturalHeight; };
+  $('picSend').disabled = false; hideStatus($('picStatus'));
+  const box = $('picRec'); box.hidden = false; box.innerHTML = '<span class="mut">Looking at the picture…</span>';
+  try {
+    const r = await api('/api/picture/recommend', { method: 'POST', body: f, timeout: 60000, headers: { 'Content-Type': f.type || 'application/octet-stream' } });
+    PIC.rec = r;
+    box.innerHTML = (r.message ? esc(r.message) : 'Best mode: <strong>' + esc(r.label) + '</strong> (' + esc(r.reason) + ').') +
+      (r.mode === 'true-color' ? '' : ' <span class="mut">True color is limited to 96 px wide.</span>');
+    const opt = $('picMode').querySelector('option[value=auto]'); opt.textContent = 'Auto (best fit: ' + r.label + ')';
+  } catch (err) {
+    box.innerHTML = '<span class="mut">' + esc(err.network ? 'Couldn’t reach signd.' : 'No recommendation: ' + err.message) + '</span>';
+  }
+});
+$('picSend').addEventListener('click', async () => {
+  if (!PIC.file) return;
+  const st = $('picStatus'), btn = $('picSend'), mode = $('picMode').value;
+  btn.disabled = true;
+  try {
+    showStatus(st, 'run', 'Uploading ' + esc(PIC.file.name) + '…');
+    const q = '?mode=' + encodeURIComponent(mode) + ($('picStill').checked ? '&still=1' : '');
+    const job = await api('/api/picture' + q, { method: 'POST', body: PIC.file, timeout: 90000, headers: { 'Content-Type': PIC.file.type || 'application/octet-stream' } });
+    const label = 'Showing ' + PIC.file.name;
+    track(job, (j) => {
+      jobStatus(st, label, j);
+      const r = j.result || {};
+      if (j.state === 'done' && r.mode) st.querySelector('span:last-child').insertAdjacentHTML('beforeend',
+        ' · ' + esc(PIC_LABELS[r.mode] || r.mode) +
+        (r.notes && r.notes.length ? ' · ' + esc(r.notes.join('; ')) : ''));
+    });
+    refreshJobs();
+  } catch (err) {
+    showStatus(st, 'bad', esc(err.network ? 'Couldn’t reach signd, so nothing was sent.' : err.message));
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ---------- power & brightness ---------- */
+let brightDirty = false;
+async function sendCtl(path, json, label) {
+  const st = $('ctlStatus');
+  showStatus(st, 'run', 'Queuing ' + esc(label.toLowerCase()) + '…');
+  try {
+    const job = await api(path, { method: 'POST', json });
+    track(job, (j) => { jobStatus(st, label, j); if (!ACTIVE[j.state]) brightDirty = false; });
+    refreshJobs();
+  } catch (err) {
+    showStatus(st, 'bad', esc(err.network ? 'Couldn’t reach signd.' : err.message));
+    brightDirty = false;
+  }
+}
+$('pwrOn').addEventListener('click', () => sendCtl('/api/power', { on: true, verify: true }, 'Power on'));
+$('pwrOff').addEventListener('click', () => sendCtl('/api/power', { on: false, verify: true }, 'Power off'));
+$('bright').addEventListener('input', () => { brightDirty = true; $('brightVal').textContent = $('bright').value; });
+$('bright').addEventListener('change', () => {
+  const lv = parseInt($('bright').value, 10);
+  sendCtl('/api/brightness', { level: lv }, 'Brightness ' + lv);
+});
+function syncControlsFromJobs() {
+  const pw = S.jobs.find((j) => j.kind === 'power' && j.state === 'done');
+  const br = S.jobs.find((j) => j.kind === 'brightness' && j.state === 'done');
+  $('pwrOn').classList.toggle('on', !!(pw && pw.args && pw.args.on));
+  $('pwrOff').classList.toggle('on', !!(pw && pw.args && !pw.args.on));
+  $('pwrOn').setAttribute('aria-pressed', String(!!(pw && pw.args && pw.args.on)));
+  $('pwrOff').setAttribute('aria-pressed', String(!!(pw && pw.args && !pw.args.on)));
+  $('pwrNote').textContent = pw ? 'Last set ' + (pw.args.on ? 'on' : 'off') + ' ' + ago(pw.finished_at || pw.queued_at) + (who(pw.origin) ? ' by ' + who(pw.origin) : '') : ' ';
+  if (br && !brightDirty && br.args && br.args.level) {
+    $('bright').value = br.args.level; $('brightVal').textContent = br.args.level;
+  } else if (!br && !brightDirty && $('brightVal').textContent === '–') {
+    $('brightVal').textContent = '–';
+  }
+}
+
+/* ---------- camera ---------- */
+let lastPhotoKey;   // undefined until the first jobs load; the 'photo' poller fetches the initial photo
+function maybeNewPhoto() {
+  // a finished job that took a photo means /api/camera has something newer
+  const j = S.jobs.find((x) => x.state === 'done' && x.result && x.result.photo);
+  const key = j ? j.id : null;
+  if (lastPhotoKey === undefined) { lastPhotoKey = key; return; }
+  if (key && key !== lastPhotoKey) { lastPhotoKey = key; refreshPhoto(); }
+}
+async function refreshPhoto() {
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 30000);
+  try {
+    const r = await fetch('/api/camera', { cache: 'no-store', signal: ctl.signal });
+    if (r.status === 404) { showNoPhoto('No photos yet. Tap “Take photo”.'); return; }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const name = r.headers.get('X-Photo') || '';
+    const blob = await r.blob();
+    if (S.photoUrl) URL.revokeObjectURL(S.photoUrl);
+    S.photoUrl = URL.createObjectURL(blob); S.photoName = name;
+    const img = $('photo'); img.src = S.photoUrl; img.hidden = false; $('photoEmpty').hidden = true;
+    const m = name.match(/(\d{9,11})/);
+    const lm = r.headers.get('Last-Modified');
+    S.photoAt = m ? Number(m[1]) : (lm ? Date.parse(lm) / 1000 : null);
+    renderPhotoMeta();
+  } catch (e) {
+    if (!S.photoUrl) showNoPhoto('Photo unavailable' + (e.name === 'AbortError' ? ' (timed out)' : ''));
+  } finally { clearTimeout(timer); }
+}
+function showNoPhoto(msg) { $('photo').hidden = true; $('photoEmpty').hidden = false; $('photoEmpty').textContent = msg; $('photoMeta').textContent = ''; }
+function renderPhotoMeta() {
+  if (!S.photoUrl) return;
+  $('photoMeta').textContent = S.photoAt ? 'Taken ' + clock(S.photoAt) + ' · ' + ago(S.photoAt) : (S.photoName || 'Latest photo');
+}
+$('lookBtn').addEventListener('click', async () => {
+  const st = $('lookStatus'), btn = $('lookBtn');
+  btn.disabled = true;
+  showStatus(st, 'run', 'Taking a photo with the camera phone…');
+  try {
+    let job;
+    try { job = await api('/api/look', { method: 'POST', json: {}, timeout: 100000 }); }
+    catch (e) { if (e.status === 404 || e.status === 405 || e.status === 501) job = await api('/api/camera', { method: 'POST', json: {} }); else throw e; }
+    if (job && job.id) {
+      track(job, (j) => {
+        jobStatus(st, 'Photo', j);
+        if (!ACTIVE[j.state]) { btn.disabled = false; if (j.state === 'done') { refreshPhoto(); setTimeout(() => hideStatus(st), 8000); } }
+      });
+    } else { hideStatus(st); btn.disabled = false; refreshPhoto(); }
+  } catch (err) {
+    showStatus(st, 'bad', esc(err.network ? 'Couldn’t reach signd.' : err.message));
+    btn.disabled = false;
+  }
+});
+
+/* ---------- schedule (optional endpoint) ---------- */
+async function refreshSchedule() {
+  try {
+    const d = await api('/api/schedule');
+    const items = Array.isArray(d) ? d : (d && (d.items || d.schedule || d.jobs)) || [];
+    S.schedule = items;
+    $('schedCard').hidden = false;
+    renderSchedule();
+  } catch (e) {
+    if (!e.network) { $('schedCard').hidden = true; S.schedule = null; }  // 404 or other: feature not available
+  }
+}
+function renderSchedule() {
+  const it = S.schedule || [];
+  $('schedList').innerHTML = it.length ? it.map((s) => {
+    const at = s.at || s.time || '';
+    const when = /^\d{1,2}:\d{2}$/.test(at) ? at : (Date.parse(at) ? new Date(at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : at);
+    return '<li><span class="mono small" style="min-width:64px">' + esc(when) + '</span>' +
+      '<span class="grow">“' + esc(s.text) + '”' + (s.color ? '<span class="cdot" style="background:' + esc(colorCss(s.color)) + '"></span>' : '') + '</span>' +
+      (s.id != null ? '<button class="btn" type="button" data-del="' + esc(s.id) + '" aria-label="Remove scheduled message">Remove</button>' : '') + '</li>';
+  }).join('') : '<li class="small mut">Nothing scheduled.</li>';
+}
+$('schedList').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-del]'); if (!b) return;
+  b.disabled = true;
+  try { await api('/api/schedule/' + encodeURIComponent(b.dataset.del), { method: 'DELETE' }); hideStatus($('schedStatus')); refreshSchedule(); }
+  catch (err) { showStatus($('schedStatus'), 'bad', esc(err.message)); b.disabled = false; }
+});
+$('schedForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const at = $('schedAt').value, text = $('schedText').value.trim();
+  if (!at || !text) return;
+  try {
+    await api('/api/schedule', { method: 'POST', json: { at, text, color: $('schedColor').value } });
+    $('schedText').value = '';
+    showStatus($('schedStatus'), 'ok', 'Scheduled for ' + esc(at) + '.');
+    refreshSchedule();
+  } catch (err) { showStatus($('schedStatus'), 'bad', esc(err.network ? 'Couldn’t reach signd.' : err.message)); }
+});
+
+/* ---------- polling ---------- */
+// /api/now can cost a Bluetooth read and /api/health pokes the phone, so both stay at 15 s.
+// Jobs and the job tracker are cheap in-memory reads.
+const timers = {};
+function every(name, fn, msFn) {
+  let busy = false;
+  const run = async () => {
+    clearTimeout(timers[name]);
+    if (!document.hidden && !busy) { busy = true; try { await fn(); } finally { busy = false; } }
+    timers[name] = setTimeout(run, typeof msFn === 'function' ? msFn() : msFn);
+  };
+  timers[name + ':run'] = run;
+  run();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  ['health', 'jobs'].forEach((n) => timers[n + ':run'] && timers[n + ':run']());
+  if (nowS() - S.nowAt > 15) timers['now:run'] && timers['now:run']();
+  kickAnim();
+});
+
+buildSwatches();
+setColor(S.color);
+every('health', refreshHealth, 15000);
+every('now', refreshNow, 15000);
+every('jobs', refreshJobs, () => (anyActive() ? 4000 : 15000));
+every('schedule', refreshSchedule, 60000);
+every('photo', refreshPhoto, 120000);
+setInterval(() => { renderNowCap(); renderPhotoMeta(); if (anyActive()) renderJobs(); }, 5000);
+</script>
+</body>
+</html>

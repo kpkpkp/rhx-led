@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+# site settings and anything generated or captured on your own setup
+signboard.toml
+.signboard.toml
+signboard/templates/*.bin
+*.bin
+*.apk
+captures/
+photos/
+*.jpg
+*.jpeg
+*.mp4
+LedRom
+.env

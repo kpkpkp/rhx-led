@@ -1,0 +1,8 @@
+#!/bin/sh
+# Install: cp tools/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# Blocks commits that contain addresses, serials, emails, user paths, password literals, or any word listed in
+# ~/.signboard-private-words (your own list: your name, town, device serials, ...; never committed).
+tmp=$(mktemp -d)
+git diff --cached --name-only --diff-filter=ACM | while read -r f; do mkdir -p "$tmp/$(dirname "$f")"; git show ":$f" > "$tmp/$f"; done
+python tools/scan_private.py "$tmp"; rc=$?
+rm -rf "$tmp"; exit $rc

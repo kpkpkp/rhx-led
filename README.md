@@ -1,0 +1,72 @@
+# rhx-led
+
+Drive an **RHX-series LED sign controller** (developed on an RHX8-Q1C with a 128×32 RGB panel) straight from a
+computer over Bluetooth LE: no vendor app, no phone. Send text, photos, animations and patterns, switch the panel
+on and off, set the brightness, and run it all from a small LAN web service.
+
+> **Use it on signs you own.** The controller protects writes with a password. This project logs in with *your*
+> password, read from your own config file; it does not guess or bypass anything. Controllers ship with a well-known
+> factory password, so **change yours in the RHX app before using this** (or anything else) near other people.
+
+Not affiliated with the controller's manufacturer. Reverse-engineered for interoperability with hardware we own.
+
+## What works (tested on real hardware, with a camera watching the sign)
+
+| | |
+|---|---|
+| Text | 7-colour scrolling text over an animated background; text-only programs upload in about 0.6 s |
+| Pictures | all six work modes: seven-colour, seven-colour lengthening, low / middle / high gray, true colour |
+| Animations | sequences of whole pictures played by the controller (~83 ms per picture) |
+| Pans | one picture scrolled by the controller itself, up / down / left / right, a few KB |
+| Patterns | seamless tessellations panned in a square loop with clean corners (`signboard.patterns`) |
+| Control | power on/off and brightness 1–16 without disturbing the stored program |
+| Speed | ~16 KB/s uploads on Windows (throughput-optimised BLE link); programs of 178 KB verified |
+| Service | `signd`: HTTP API + web UI on the LAN, mDNS name, job queue, schedules, optional camera verification |
+
+What the controller does **not** do (tested): partial writes or live updates. Every change is a full program upload,
+so small programs are fast and big animations are slow. See `docs/PROTOCOL.md`.
+
+## Quick start
+
+Requirements: Python 3.11+, a Bluetooth LE adapter, `pip install bleak pillow zeroconf`.
+
+1. **Config.** Copy `signboard.example.toml` to `~/.signboard.toml` and fill in your controller's BLE address and
+   password.
+2. **Templates.** Picture and text programs are built on templates made from your own RHX Plus exports (they are
+   the vendor's files, so they are not shipped here). Follow `docs/templates.md`: one "USB drive" export per mode,
+   then `python -m signboard.import_ledrom <export>`.
+3. **Try it.**
+
+   ```
+   python -m signboard.direct status          # read what the controller holds (no login needed)
+   python -m signboard.direct off             # then: on, brightness 1
+   python -m signboard.patterns houndstooth hound.bin && python -m signboard.direct upload hound.bin
+   python -m signboard.signd --port 8090      # web UI + API on http://<this host>:8090/
+   ```
+
+4. `python -m signboard.selftest` runs the offline checks (more of them once templates are installed).
+
+## Layout
+
+```
+signboard/
+  protocol.py  crypto.py  direct.py       BLE frames, login, uploads, power, brightness
+  image.py  render.py                     program image container; text + background rendering
+  picture.py  sequence.py  pan.py         picture modes, picture sequences, controller pans
+  patterns.py                             seamless panned tessellations
+  import_ledrom.py                        turn your RHX Plus export into a template
+  signd.py  web/index.html                LAN service and UI
+  camera.py  verify.py  morning.py        optional: phone camera checks, timed shows
+  config.py                               all site settings (from ~/.signboard.toml)
+docs/  PROTOCOL.md  templates.md
+tools/ scan_private.py  pre-commit        keep personal data out of commits
+```
+
+## Contributing
+
+See `CONTRIBUTING.md`. Findings about other RHX controllers, panel sizes and modes are very welcome, especially
+anything verified on real hardware.
+
+## License
+
+MIT, see `LICENSE`.
