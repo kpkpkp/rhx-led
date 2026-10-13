@@ -248,3 +248,32 @@ def test_api_state(server):
     assert wait_job(port, j['id'])['state'] == 'done'
     st, v = call(port, 'GET', '/api/state')
     assert st == 200 and v['content']['text'] == 'State' and v['content']['background'] == 'none' and v['power'] is True
+
+
+# ---- per-visitor choices (/api/prefs) and stored uploads ------------------------------------------------------------
+
+def test_prefs_per_device(server):
+    port, *_ = server
+    assert call(port, 'POST', '/api/prefs', {'msg': 'Hello', 'color': 'red', 'picStill': True,
+                                             'bgStored': '../../etc/passwd', 'evil': 1, 'msg2': 'x'})[0] == 200
+    st, p = call(port, 'GET', '/api/prefs')
+    assert st == 200 and p['msg'] == 'Hello' and p['color'] == 'red' and p['picStill'] is True
+    assert 'bgStored' not in p and 'evil' not in p and 'msg2' not in p          # unknown keys and bad names dropped
+    assert call(port, 'POST', '/api/prefs', {'msg': 5})[1]['msg'] == 'Hello'    # wrong types are ignored
+
+
+@pytest.mark.skipif('low-gray' not in installed_modes(), reason='no low-gray template')
+def test_stored_picture_reshown_without_upload(server):
+    port, ctrl, _ = server
+    buf = io.BytesIO(); Image.new('RGB', (200, 50), (40, 200, 40)).save(buf, 'PNG')
+    st, r = call(port, 'POST', '/api/picture/recommend?keep=1', buf.getvalue(), {'Content-Type': 'image/png'})
+    assert st == 200 and signd.STORED_NAME.fullmatch(r['stored'])
+    st, data = call(port, 'GET', '/api/stored/' + r['stored'])
+    assert st == 200 and Image.open(io.BytesIO(data)).size == (200, 50)
+    assert call(port, 'GET', '/api/stored/signd-state.json')[0] == 404          # only uploads, by their own names
+    st, j = call(port, 'POST', f"/api/picture?mode=low-gray&still=1&stored={r['stored']}", {})
+    assert st == 202
+    j = wait_job(port, j['id'])
+    assert j['state'] == 'done', j.get('error')
+    assert j['result']['mode'] == 'low-gray' and ctrl.image()[7] == 0x73
+    assert call(port, 'POST', '/api/picture?stored=src-1-abcd.png', {})[0] == 404

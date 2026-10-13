@@ -318,6 +318,16 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 };
+/* this visitor's choices: signd keeps them per device (/api/prefs), so they survive sessions and the host's other
+   names (the .local name, the router's DNS name and the IP each get their own browser storage); this browser keeps a copy */
+const P = (() => { try { return JSON.parse(store.get('sign-prefs') || '{}') || {}; } catch (e) { return {}; } })();
+let prefsTimer;
+function savePrefs(patch) {
+  Object.assign(P, patch, { saved_at: Date.now() / 1000 });
+  store.set('sign-prefs', JSON.stringify(P));
+  clearTimeout(prefsTimer);
+  prefsTimer = setTimeout(() => { api('/api/prefs', { method: 'POST', json: P }).catch(() => {}); }, 400);
+}
 const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // LED-ish colors for the named controller colors (what the panel looks like, not the UI palette)
@@ -553,7 +563,7 @@ const S = {
   health: null,
   jobs: [], tracked: new Map(),
   color: store.get('sign-color') || 'green',
-  file: null, fileBg: null, bgNone: false,
+  file: null, fileBg: null, bgNone: false, bgStored: null, bgName: null,
   state: null,
   photoName: null, photoUrl: null,
   schedule: null
@@ -615,7 +625,7 @@ async function refreshState() {
     appliedAt = st.changed_at;
     if (c && c.kind === 'text') {
       if (!touched.color && c.color) setColor(c.color, true);
-      if (!touched.bg && !S.file && c.background !== 'unknown') setBgNone(c.background === 'none');
+      if (!touched.bg && !S.file && !S.bgStored && c.background !== 'unknown') setBgNone(c.background === 'none');
     }
   }
   syncControlsFromJobs();
@@ -795,7 +805,7 @@ function buildSwatches() {
 }
 function setColor(c, fromSign) {
   S.color = c;
-  if (!fromSign) { touched.color = true; store.set('sign-color', c); }
+  if (!fromSign) { touched.color = true; store.set('sign-color', c); savePrefs({ color: c }); }
   const named = !!NAMED[c];
   document.querySelectorAll('#swatches button.sw').forEach((el) => el.setAttribute('aria-pressed', String(el.dataset.c === c)));
   document.querySelector('#swatches .sw.custom').classList.toggle('sel', !named);
@@ -822,6 +832,13 @@ $('file').addEventListener('change', async () => {
   try {
     const { data, w, h } = await rasterize(f);
     S.file = f; S.fileBg = data; touched.bg = true; setBgNone(false);
+    S.bgStored = null; S.bgName = f.name;
+    api('/api/image?name=' + encodeURIComponent(f.name.replace(/[^A-Za-z0-9._-]/g, '_')), {
+      method: 'POST', body: f, timeout: 90000, headers: { 'Content-Type': f.type || 'application/octet-stream' }
+    }).then((up) => {
+      if (S.file !== f || !up || !up.stored) return;
+      S.bgStored = up.stored; savePrefs({ bgStored: up.stored, bgName: f.name, bgNone: false });
+    }).catch(() => {});
     $('fileName').textContent = f.name; $('fileChip').classList.add('show');
     note.hidden = false;
     note.textContent = (w === PW && h === PH ? '128×32, a perfect fit.' : 'This image is ' + w + '×' + h + '; the sign is 128×32, so the preview scales it to fit.') +
@@ -834,16 +851,18 @@ $('file').addEventListener('change', async () => {
 function setBgNone(on) {
   S.bgNone = on;
   const b = $('bgNone'); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
-  if (!S.file) { const note = $('fileNote'); note.hidden = !on; note.textContent = on ? 'No background animation: text on black.' : ''; }
+  if (!S.file && !S.bgStored) { const note = $('fileNote'); note.hidden = !on; note.textContent = on ? 'No background animation: text on black.' : ''; }
 }
 $('bgNone').addEventListener('click', () => {
   touched.bg = true;
-  if (!S.bgNone) { S.file = null; S.fileBg = null; $('fileChip').classList.remove('show'); }
+  if (!S.bgNone) { S.file = null; S.fileBg = null; S.bgStored = null; $('fileChip').classList.remove('show'); }
   setBgNone(!S.bgNone);
+  savePrefs(S.bgNone ? { bgNone: true, bgStored: '', bgName: '' } : { bgNone: false });
   updatePreview();
 });
 $('fileClear').addEventListener('click', () => {
-  S.file = null; S.fileBg = null;
+  S.file = null; S.fileBg = null; S.bgStored = null;
+  savePrefs({ bgStored: '', bgName: '' });
   $('fileChip').classList.remove('show'); $('fileNote').hidden = true;
   updatePreview();
 });
@@ -872,7 +891,10 @@ $('sendForm').addEventListener('submit', async (e) => {
   btn.disabled = true;
   try {
     const body = { text, color: S.color, verify: true };
-    if (S.file) {
+    savePrefs({ msg: $('msg').value, color: S.color });
+    if (S.bgStored) {
+      body.background = S.bgStored;
+    } else if (S.file) {
       showStatus(st, 'run', 'Uploading ' + esc(S.file.name) + '…');
       const name = S.file.name.replace(/[^A-Za-z0-9._-]/g, '_');
       const up = await api('/api/image?name=' + encodeURIComponent(name), {
@@ -885,7 +907,7 @@ $('sendForm').addEventListener('submit', async (e) => {
     }
     showStatus(st, 'run', 'Queuing…');
     const job = await api('/api/text', { method: 'POST', json: body });
-    $('msg').value = ''; store.set('sign-draft', ''); updatePreview();
+    updatePreview();
     touched.color = touched.bg = false;
     track(job, (j) => jobStatus(st, 'Sending “' + text + '”', j));
     refreshJobs();
@@ -897,19 +919,20 @@ $('sendForm').addEventListener('submit', async (e) => {
 });
 
 /* ---------- picture ---------- */
-const PIC = { file: null, rec: null };
+const PIC = { file: null, rec: null, stored: null, name: null };
 const PIC_LABELS = { 'seven-lengthen': 'Seven colour', 'low-gray': 'Low gray', 'middle-gray': 'Middle gray', 'high-gray': 'High gray', 'true-color': 'True color' };
 $('picFile').addEventListener('change', async () => {
   const f = $('picFile').files && $('picFile').files[0];
   if (!f) return;
-  PIC.file = f; PIC.rec = null;
+  PIC.file = f; PIC.rec = null; PIC.stored = null; PIC.name = f.name;
   const img = $('picImg'); img.src = URL.createObjectURL(f); img.hidden = false; $('picEmpty').hidden = true;
   img.onload = () => { $('picSize').textContent = f.name + ' · ' + img.naturalWidth + '×' + img.naturalHeight; };
   $('picSend').disabled = false; hideStatus($('picStatus'));
   const box = $('picRec'); box.hidden = false; box.innerHTML = '<span class="mut">Looking at the picture…</span>';
   try {
-    const r = await api('/api/picture/recommend', { method: 'POST', body: f, timeout: 60000, headers: { 'Content-Type': f.type || 'application/octet-stream' } });
+    const r = await api('/api/picture/recommend?keep=1', { method: 'POST', body: f, timeout: 60000, headers: { 'Content-Type': f.type || 'application/octet-stream' } });
     PIC.rec = r;
+    if (r.stored && PIC.file === f) { PIC.stored = r.stored; savePrefs({ picStored: r.stored, picName: f.name }); }
     box.innerHTML = (r.message ? esc(r.message) : 'Best mode: <strong>' + esc(r.label) + '</strong> (' + esc(r.reason) + ').') +
       (r.mode === 'true-color' ? '' : ' <span class="mut">True color is limited to 96 px wide.</span>');
     const opt = $('picMode').querySelector('option[value=auto]'); opt.textContent = 'Auto (best fit: ' + r.label + ')';
@@ -918,14 +941,20 @@ $('picFile').addEventListener('change', async () => {
   }
 });
 $('picSend').addEventListener('click', async () => {
-  if (!PIC.file) return;
+  if (!PIC.file && !PIC.stored) return;
   const st = $('picStatus'), btn = $('picSend'), mode = $('picMode').value;
   btn.disabled = true;
   try {
-    showStatus(st, 'run', 'Uploading ' + esc(PIC.file.name) + '…');
     const q = '?mode=' + encodeURIComponent(mode) + ($('picStill').checked ? '&still=1' : '');
-    const job = await api('/api/picture' + q, { method: 'POST', body: PIC.file, timeout: 90000, headers: { 'Content-Type': PIC.file.type || 'application/octet-stream' } });
-    const label = 'Showing ' + PIC.file.name;
+    let job;
+    if (PIC.stored) {
+      showStatus(st, 'run', 'Queuing ' + esc(PIC.name) + '…');
+      job = await api('/api/picture' + q + '&stored=' + encodeURIComponent(PIC.stored), { method: 'POST', json: {} });
+    } else {
+      showStatus(st, 'run', 'Uploading ' + esc(PIC.name) + '…');
+      job = await api('/api/picture' + q, { method: 'POST', body: PIC.file, timeout: 90000, headers: { 'Content-Type': PIC.file.type || 'application/octet-stream' } });
+    }
+    const label = 'Showing ' + PIC.name;
     track(job, (j) => {
       jobStatus(st, label, j);
       const r = j.result || {};
@@ -1093,14 +1122,48 @@ document.addEventListener('visibilitychange', () => {
 
 buildSwatches();
 setColor(S.color, true);
-// per-user preferences (this browser only)
-$('msg').value = store.get('sign-draft') || '';
-$('msg').addEventListener('input', () => store.set('sign-draft', $('msg').value));
-if (store.get('sign-pic-mode')) $('picMode').value = store.get('sign-pic-mode');
-$('picMode').addEventListener('change', () => store.set('sign-pic-mode', $('picMode').value));
-$('picStill').checked = store.get('sign-pic-still') === '1';
-$('picStill').addEventListener('change', () => store.set('sign-pic-still', $('picStill').checked ? '1' : ''));
-updatePreview();
+// this visitor's choices (see savePrefs): this browser's copy now, then signd's (newer wins)
+$('msg').addEventListener('input', () => savePrefs({ msg: $('msg').value }));
+$('picMode').addEventListener('change', () => savePrefs({ picMode: $('picMode').value }));
+$('picStill').addEventListener('change', () => savePrefs({ picStill: $('picStill').checked }));
+async function restoreBg(name, label) {
+  try {
+    const r = await fetch('/api/stored/' + encodeURIComponent(name));
+    if (!r.ok) { if (r.status === 404) savePrefs({ bgStored: '', bgName: '' }); return; }
+    const blob = await r.blob();
+    const { data } = await rasterize(blob);
+    if (S.file) return;                                // picked another file meanwhile
+    S.bgStored = name; S.bgName = label || name; S.fileBg = data; setBgNone(false);
+    $('fileName').textContent = S.bgName; $('fileChip').classList.add('show');
+    updatePreview();
+  } catch (e) {}
+}
+function restorePic(name, label) {
+  if (PIC.file) return;
+  PIC.stored = name; PIC.name = label || name;
+  const img = $('picImg');
+  img.onerror = () => { PIC.stored = null; img.hidden = true; $('picEmpty').hidden = false; $('picSend').disabled = true; };
+  img.onload = () => { $('picSize').textContent = PIC.name + ' · ' + img.naturalWidth + '×' + img.naturalHeight; };
+  img.src = '/api/stored/' + encodeURIComponent(name); img.hidden = false; $('picEmpty').hidden = true;
+  $('picSend').disabled = false;
+}
+function applyPrefs(p) {
+  if (typeof p.msg === 'string' && document.activeElement !== $('msg')) $('msg').value = p.msg;
+  if (p.color) { setColor(p.color, true); touched.color = true; }
+  if (p.picMode) $('picMode').value = p.picMode;
+  if (typeof p.picStill === 'boolean') $('picStill').checked = p.picStill;
+  if (p.bgStored) { touched.bg = true; restoreBg(p.bgStored, p.bgName); }
+  else if (typeof p.bgNone === 'boolean') { touched.bg = true; setBgNone(p.bgNone); }
+  if (p.picStored) restorePic(p.picStored, p.picName);
+  updatePreview();
+}
+if (!P.msg && store.get('sign-draft')) P.msg = store.get('sign-draft');      // earlier versions of this page
+applyPrefs(P);
+api('/api/prefs').then((sp) => {
+  if (!sp || !sp.saved_at) { if (P.saved_at) savePrefs({}); return; }   // signd has nothing yet: give it ours
+  if (P.saved_at && P.saved_at > sp.saved_at) { savePrefs({}); return; }
+  Object.assign(P, sp); store.set('sign-prefs', JSON.stringify(P)); applyPrefs(sp);
+}).catch(() => {});
 every('health', refreshHealth, 15000);
 every('now', refreshNow, 15000);
 every('jobs', refreshJobs, () => (anyActive() ? 4000 : 15000));   // also refreshes /api/state

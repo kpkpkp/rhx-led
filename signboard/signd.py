@@ -37,6 +37,7 @@ import queue
 import re
 import threading
 import time
+import urllib.parse
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -113,6 +114,56 @@ class SignState:
             tmp = self.path.with_suffix('.tmp')
             tmp.write_text(json.dumps(v, indent=1), encoding='utf-8')
             tmp.replace(self.path)
+
+
+class Prefs:
+    """Each visitor's web UI choices (message, colour, background and picture files, picture mode...), kept by signd so
+    they survive browser sessions and the different names of this host (sign.local, the IP, the router name: each is
+    its own browser storage). Keyed by the client's address, which at home means one device = one user."""
+    KEYS = {'msg': str, 'color': str, 'bgNone': bool, 'bgStored': str, 'bgName': str, 'picStored': str, 'picName': str,
+            'picMode': str, 'picStill': bool, 'theme': str}
+
+    def __init__(self, path=None):
+        self.path = path or config.state_file('prefs.json')
+        self.lock = threading.Lock()
+        try:
+            self.val = json.loads(self.path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            self.val = {}
+
+    def get(self, who):
+        with self.lock:
+            return dict(self.val.get(who) or {})
+
+    def update(self, who, a):
+        clean = {}
+        for k, v in a.items():
+            t = self.KEYS.get(k)
+            if t is None or v is None or not isinstance(v, t) or (t is str and len(v) > 500):
+                continue
+            if k in ('bgStored', 'picStored') and v and not STORED_NAME.fullmatch(v):
+                continue
+            clean[k] = v
+        with self.lock:
+            cur = self.val.setdefault(who, {})
+            cur.update(clean); cur['saved_at'] = time.time()
+            tmp = self.path.with_suffix('.tmp')
+            tmp.write_text(json.dumps(self.val, indent=1), encoding='utf-8')
+            tmp.replace(self.path)
+            return dict(cur)
+
+
+STORED_NAME = re.compile(r'(bg|src)-\d+-[0-9a-f]{4,8}\.(gif|png|jpg|webp)')   # uploads a visitor may fetch or reuse
+KEEP_UPLOADS = 60                                                            # newest stored uploads kept per kind
+
+
+def store_upload(kind, data, ext):
+    name = f'{kind}-{int(time.time())}-{uuid.uuid4().hex[:6]}{ext}'
+    (PHOTO_DIR / name).write_bytes(data)
+    for old in sorted(PHOTO_DIR.glob(f'{kind}-*'), key=lambda f: f.stat().st_mtime)[:-KEEP_UPLOADS]:
+        try: old.unlink()
+        except OSError: pass
+    return name
 
 
 def keep_panel_only(photo, pad=0.15):
@@ -516,7 +567,9 @@ def host_allowed(host):
         return host in ALLOWED_HOSTS
 
 
-def make_handler(jobs: Jobs, reads, sched=None):
+def make_handler(jobs: Jobs, reads, sched=None, prefs=None):
+    prefs = prefs or Prefs()
+
     class H(BaseHTTPRequestHandler):
         def _json(self, code, obj):
             body = json.dumps(obj, ensure_ascii=False, indent=2).encode()
@@ -607,6 +660,16 @@ def make_handler(jobs: Jobs, reads, sched=None):
                                         'read_error': getattr(reads, 'err', None)})
             if p == '/api/state':
                 return self._json(200, jobs.state.get())
+            if p == '/api/prefs':
+                return self._json(200, prefs.get(self.client_address[0]))
+            if p.startswith('/api/stored/'):
+                name = p.rsplit('/', 1)[1]
+                f = PHOTO_DIR / name
+                if not STORED_NAME.fullmatch(name) or not f.is_file(): return self._json(404, {'error': 'not found'})
+                data = f.read_bytes()
+                ctype = {'.gif': 'image/gif', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp'}[f.suffix]
+                self.send_response(200); self.send_header('Content-Type', ctype); self.send_header('Content-Length', str(len(data)))
+                self.send_header('Cache-Control', 'private, max-age=86400'); self.end_headers(); self.wfile.write(data); return
             if p == '/api/jobs':
                 return self._json(200, list(jobs.jobs.values())[-30:][::-1])
             if p == '/api/schedule':
@@ -616,6 +679,7 @@ def make_handler(jobs: Jobs, reads, sched=None):
                 name = config.get('sign_name') or 'LED Sign'
                 body = WEB.read_text(encoding='utf-8').replace('{{SIGN_NAME_UPPER}}', name.upper()).replace('{{SIGN_NAME}}', name).encode()
                 self.send_response(200); self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.send_header('Cache-Control', 'no-cache')   # phones kept serving an old page after updates
                 self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body); return
             if p.startswith('/api/jobs/'):
                 j = jobs.jobs.get(p.rsplit('/', 1)[1]); return self._json(200 if j else 404, j or {'error': 'no such job'})
@@ -651,20 +715,32 @@ def make_handler(jobs: Jobs, reads, sched=None):
                 except Exception as e:
                     return self._json(400, {'error': f'not an image: {e}'})
                 if not ext: return self._json(400, {'error': 'GIF, PNG or JPEG only'})
-                name = f'bg-{int(time.time())}-{uuid.uuid4().hex[:6]}{ext}'
-                (PHOTO_DIR / name).write_bytes(data)
+                name = store_upload('bg', data, ext)
                 return self._json(200, {'stored': name, 'use': {'background': name}, **info})
             if p in ('/api/picture', '/api/picture/recommend'):
+                q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(self.path).query))
                 try:
-                    data, opts = self._picture_body()
                     from PIL import Image
                     import io
+                    if q.get('stored'):                    # a picture this visitor uploaded before (its prefs keep the name)
+                        if not STORED_NAME.fullmatch(q['stored']) or not (PHOTO_DIR / q['stored']).is_file():
+                            return self._json(404, {'error': 'no such stored picture'})
+                        self._body()                       # whatever the client sent is not needed
+                        data, opts = (PHOTO_DIR / q['stored']).read_bytes(), q
+                    else:
+                        data, opts = self._picture_body()
                     im = Image.open(io.BytesIO(data)); im.load()
                 except Exception as e:
                     return self._json(400, {'error': f'not an image: {e}'})
                 from signboard import picture
                 if p == '/api/picture/recommend':
-                    return self._json(200, dict(picture.recommend(im), size=list(im.size)))
+                    out = dict(picture.recommend(im), size=list(im.size))
+                    if q.get('keep') and not q.get('stored'):
+                        ext = {'GIF': '.gif', 'PNG': '.png', 'JPEG': '.jpg', 'WEBP': '.webp'}.get(im.format, '.png')
+                        if ext == '.png' and im.format != 'PNG':
+                            buf = io.BytesIO(); im.convert('RGB').save(buf, 'PNG'); data = buf.getvalue()
+                        out['stored'] = store_upload('src', data, ext)
+                    return self._json(200, out)
                 mode = opts.get('mode') or 'auto'
                 if mode != 'auto' and mode not in picture.MODES:
                     return self._json(400, {'error': f'mode must be auto or one of {list(picture.MODES)}'})
@@ -682,6 +758,8 @@ def make_handler(jobs: Jobs, reads, sched=None):
             try: a = json.loads(self._body() or b'{}')
             except json.JSONDecodeError: return self._json(400, {'error': 'bad json'})
             if not isinstance(a, dict): return self._json(400, {'error': 'body must be a JSON object'})
+            if p == '/api/prefs':
+                return self._json(200, prefs.update(self.client_address[0], a))
             if p == '/api/look':
                 return self._json(202, jobs.submit('look', {'color': a.get('color')}))
             if p == '/api/schedule':
