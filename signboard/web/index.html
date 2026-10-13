@@ -554,6 +554,7 @@ const S = {
   jobs: [], tracked: new Map(),
   color: store.get('sign-color') || 'green',
   file: null, fileBg: null, bgNone: false,
+  state: null,
   photoName: null, photoUrl: null,
   schedule: null
 };
@@ -566,7 +567,7 @@ async function refreshNow() {
   try {
     const n = await api('/api/now', { timeout: 35000 });
     S.now = n; S.nowErr = null; S.nowAt = nowS();
-    ledNow.set({ text: n.text || '', color: n.color, size: n.font_size, dim: false });
+    ledNow.set({ text: showsText() ? n.text || '' : '', color: n.color, size: n.font_size, dim: false });
     if (n.panel && n.panel.width) $('panelInfo').textContent = n.panel.width + '×' + n.panel.height + ' · RHX8-Q1C';
   } catch (e) {
     S.nowErr = e.network ? null : e.message;
@@ -582,18 +583,43 @@ function renderNowCap() {
     meta.textContent = '';
     return;
   }
-  const at = n.read_at || S.nowAt;
+  const at = n.read_at || S.nowAt, c = S.state && S.state.content;
   let s = n.text ? 'On the sign now' : 'The sign holds no text';
+  if (!showsText()) s = c.kind === 'picture' ? 'Showing a picture' + (c.mode && PIC_LABELS[c.mode] ? ' (' + PIC_LABELS[c.mode].toLowerCase() + ')' : '') : 'Showing a stored program';
+  else if (c && c.text != null && n.text != null && c.text.trim() !== String(n.text).trim()) s += ' (changed outside this page)';
+  if (S.state && S.state.by && S.state.by.content && who(S.state.by.content)) s += ' · sent by ' + who(S.state.by.content);
   s += ' · read from the controller ' + ago(at);
   if (S.nowErr) s = '<span class="stale">Showing the last read (' + ago(at) + '). Latest read failed: ' + esc(S.nowErr) + '</span>';
   else s = esc(s);
   cap.innerHTML = s;
   const bits = [];
+  if (!showsText()) { meta.textContent = ''; return; }
   if (n.color) bits.push(colorLabel(n.color));
   if (n.font_size) bits.push(n.font_size + 'px');
   if (n.font) bits.push(n.font);
   if (n.background && !/^(0|none|null)?$/i.test(String(n.background))) bits.push('bg ' + n.background);
   meta.textContent = bits.join(' · ');
+}
+
+/* ---------- /api/state: what the sign shows, shared by every visitor ---------- */
+// Controls that mirror the sign (power, brightness, colour, background) follow the sign, so everyone sees the same
+// sign. A control this visitor changed but has not sent yet is left alone. Preferences the sign does not hold
+// (draft text, picture mode, hold still, theme) stay in this browser (localStorage), per user.
+const touched = { color: false, bg: false };
+let appliedAt;
+function showsText() { const c = S.state && S.state.content; return !c || c.kind === 'text'; }
+async function refreshState() {
+  try { S.state = await api('/api/state'); } catch (e) { return; }
+  const st = S.state, c = st.content;
+  if (st.changed_at !== appliedAt) {
+    appliedAt = st.changed_at;
+    if (c && c.kind === 'text') {
+      if (!touched.color && c.color) setColor(c.color, true);
+      if (!touched.bg && !S.file && c.background !== 'unknown') setBgNone(c.background === 'none');
+    }
+  }
+  syncControlsFromJobs();
+  renderNowCap();
 }
 
 /* ---------- /api/health ---------- */
@@ -628,7 +654,7 @@ async function refreshJobs() {
     const js = await api('/api/jobs');
     S.jobs = Array.isArray(js) ? js : (js && js.jobs) || [];
     renderJobs();
-    syncControlsFromJobs();
+    refreshState();
     maybeNewPhoto();
   } catch (e) {
     if (!S.jobs.length) $('jobs').innerHTML = '<li class="small mut">' + esc(e.network ? 'Waiting for signd…' : 'Couldn’t load jobs: ' + e.message) + '</li>';
@@ -767,8 +793,9 @@ function buildSwatches() {
   $('schedColor').innerHTML = ORDER.map((k) => '<option value="' + k + '">' + k + '</option>').join('');
   $('schedColor').value = 'green';
 }
-function setColor(c) {
-  S.color = c; store.set('sign-color', c);
+function setColor(c, fromSign) {
+  S.color = c;
+  if (!fromSign) { touched.color = true; store.set('sign-color', c); }
   const named = !!NAMED[c];
   document.querySelectorAll('#swatches button.sw').forEach((el) => el.setAttribute('aria-pressed', String(el.dataset.c === c)));
   document.querySelector('#swatches .sw.custom').classList.toggle('sel', !named);
@@ -794,7 +821,7 @@ $('file').addEventListener('change', async () => {
   }
   try {
     const { data, w, h } = await rasterize(f);
-    S.file = f; S.fileBg = data; setBgNone(false);
+    S.file = f; S.fileBg = data; touched.bg = true; setBgNone(false);
     $('fileName').textContent = f.name; $('fileChip').classList.add('show');
     note.hidden = false;
     note.textContent = (w === PW && h === PH ? '128×32, a perfect fit.' : 'This image is ' + w + '×' + h + '; the sign is 128×32, so the preview scales it to fit.') +
@@ -807,12 +834,12 @@ $('file').addEventListener('change', async () => {
 function setBgNone(on) {
   S.bgNone = on;
   const b = $('bgNone'); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+  if (!S.file) { const note = $('fileNote'); note.hidden = !on; note.textContent = on ? 'No background animation: text on black.' : ''; }
 }
 $('bgNone').addEventListener('click', () => {
+  touched.bg = true;
+  if (!S.bgNone) { S.file = null; S.fileBg = null; $('fileChip').classList.remove('show'); }
   setBgNone(!S.bgNone);
-  if (S.bgNone) { S.file = null; S.fileBg = null; $('fileChip').classList.remove('show'); }
-  const note = $('fileNote');
-  note.hidden = !S.bgNone; note.textContent = S.bgNone ? 'The sign’s background animation is cleared: text on black.' : '';
   updatePreview();
 });
 $('fileClear').addEventListener('click', () => {
@@ -858,7 +885,8 @@ $('sendForm').addEventListener('submit', async (e) => {
     }
     showStatus(st, 'run', 'Queuing…');
     const job = await api('/api/text', { method: 'POST', json: body });
-    $('msg').value = ''; updatePreview();
+    $('msg').value = ''; store.set('sign-draft', ''); updatePreview();
+    touched.color = touched.bg = false;
     track(job, (j) => jobStatus(st, 'Sending “' + text + '”', j));
     refreshJobs();
   } catch (err) {
@@ -935,18 +963,18 @@ $('bright').addEventListener('change', () => {
   sendCtl('/api/brightness', { level: lv }, 'Brightness ' + lv);
 });
 function syncControlsFromJobs() {
+  // the sign's state (signd keeps it across restarts); the job list only fills in while it is still unknown
+  const st = S.state || {}, by = st.by || {};
   const pw = S.jobs.find((j) => j.kind === 'power' && j.state === 'done');
   const br = S.jobs.find((j) => j.kind === 'brightness' && j.state === 'done');
-  $('pwrOn').classList.toggle('on', !!(pw && pw.args && pw.args.on));
-  $('pwrOff').classList.toggle('on', !!(pw && pw.args && !pw.args.on));
-  $('pwrOn').setAttribute('aria-pressed', String(!!(pw && pw.args && pw.args.on)));
-  $('pwrOff').setAttribute('aria-pressed', String(!!(pw && pw.args && !pw.args.on)));
-  $('pwrNote').textContent = pw ? 'Last set ' + (pw.args.on ? 'on' : 'off') + ' ' + ago(pw.finished_at || pw.queued_at) + (who(pw.origin) ? ' by ' + who(pw.origin) : '') : ' ';
-  if (br && !brightDirty && br.args && br.args.level) {
-    $('bright').value = br.args.level; $('brightVal').textContent = br.args.level;
-  } else if (!br && !brightDirty && $('brightVal').textContent === '–') {
-    $('brightVal').textContent = '–';
-  }
+  const on = st.power != null ? st.power : pw && pw.args ? !!pw.args.on : null;
+  $('pwrOn').classList.toggle('on', on === true);
+  $('pwrOff').classList.toggle('on', on === false);
+  $('pwrOn').setAttribute('aria-pressed', String(on === true));
+  $('pwrOff').setAttribute('aria-pressed', String(on === false));
+  $('pwrNote').textContent = on == null ? ' ' : 'The sign is ' + (on ? 'on' : 'off') + (who(by.power) ? ' (set by ' + who(by.power) + ')' : '');
+  const level = st.brightness != null ? st.brightness : br && br.args && br.args.level;
+  if (level && !brightDirty) { $('bright').value = level; $('brightVal').textContent = level; }
 }
 
 /* ---------- camera ---------- */
@@ -1064,10 +1092,18 @@ document.addEventListener('visibilitychange', () => {
 });
 
 buildSwatches();
-setColor(S.color);
+setColor(S.color, true);
+// per-user preferences (this browser only)
+$('msg').value = store.get('sign-draft') || '';
+$('msg').addEventListener('input', () => store.set('sign-draft', $('msg').value));
+if (store.get('sign-pic-mode')) $('picMode').value = store.get('sign-pic-mode');
+$('picMode').addEventListener('change', () => store.set('sign-pic-mode', $('picMode').value));
+$('picStill').checked = store.get('sign-pic-still') === '1';
+$('picStill').addEventListener('change', () => store.set('sign-pic-still', $('picStill').checked ? '1' : ''));
+updatePreview();
 every('health', refreshHealth, 15000);
 every('now', refreshNow, 15000);
-every('jobs', refreshJobs, () => (anyActive() ? 4000 : 15000));
+every('jobs', refreshJobs, () => (anyActive() ? 4000 : 15000));   // also refreshes /api/state
 every('schedule', refreshSchedule, 60000);
 every('photo', refreshPhoto, 120000);
 setInterval(() => { renderNowCap(); renderPhotoMeta(); if (anyActive()) renderJobs(); }, 5000);

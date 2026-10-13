@@ -219,3 +219,29 @@ def test_auto_light_at_night(monkeypatch, tmp_path):
         signd.auto_light(jobs)
     assert not any('error' in p for p in printed), printed
     assert submitted == [('power', {'on': False, 'verify': False})]
+
+
+# ---- sign state (/api/state) ----------------------------------------------------------------------------------------
+
+def test_state_follows_jobs_and_survives_restart(tmp_path):
+    st = signd.SignState(tmp_path / 'state.json')
+    st.record('text', {'text': 'Hi', 'color': 'red', 'background': 'none'}, {}, 'a')
+    st.record('text', {'text': 'Again', 'color': 'blue'}, {}, 'b')            # no background = keep the previous one
+    st.record('brightness', {'level': 3}, {}, 'c')
+    st.record('power', {'on': False}, {}, 'd')
+    v = signd.SignState(tmp_path / 'state.json').get()                       # a new signd reads it back
+    assert v['content'] == {'kind': 'text', 'text': 'Again', 'color': 'blue', 'background': 'none'}
+    assert (v['power'], v['brightness'], v['by']['power']) == (False, 3, 'd')
+    st.record('picture', {'file': '/x/p.png'}, {'mode': 'high-gray'}, 'e')
+    v = st.get()
+    assert v['content'] == {'kind': 'picture', 'mode': 'high-gray', 'name': 'p.png'} and v['power'] is True
+    st.record('text', {'text': 'Over a picture'}, {}, 'f')                   # its background is unknown
+    assert st.get()['content']['background'] == 'unknown'
+
+
+def test_api_state(server):
+    port, _, jobs = server
+    j = call(port, 'POST', '/api/text', {'text': 'State', 'color': 'yellow', 'background': 'none'})[1]
+    assert wait_job(port, j['id'])['state'] == 'done'
+    st, v = call(port, 'GET', '/api/state')
+    assert st == 200 and v['content']['text'] == 'State' and v['content']['background'] == 'none' and v['power'] is True

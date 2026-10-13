@@ -62,12 +62,66 @@ def _judge(photo, color):
         return {'error': f'{type(e).__name__}: {e}'}
 
 
+class SignState:
+    """What the sign is showing, as far as signd knows: the last successful job of each kind, kept in
+    <state_dir>/signd-state.json so it survives restarts. Every web UI visitor sees the same state (it is the sign's,
+    not a user's); per-user preferences stay in each browser. Changes made outside signd (the vendor app,
+    morning.py) are not seen here: compare content.text with the /api/now read-back to notice them.
+
+      {"power": true|false|null, "brightness": 1..16|null,
+       "content": {"kind": "text"|"picture"|"program", "text", "color", "background", "mode", "name"},
+       "changed_at": t, "by": {"power": origin, "brightness": origin, "content": origin}}
+    """
+
+    def __init__(self, path=None):
+        self.path = path or config.state_file('state.json')
+        self.lock = threading.Lock()
+        try:
+            self.val = json.loads(self.path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            self.val = {}
+        for k, v in (('power', None), ('brightness', None), ('content', None), ('by', {})):
+            self.val.setdefault(k, v)
+
+    def get(self):
+        with self.lock:
+            return json.loads(json.dumps(self.val))
+
+    def record(self, kind, a, result, origin=None):
+        with self.lock:
+            v, by = self.val, self.val['by']
+            if kind == 'power':
+                v['power'] = bool(a.get('on')); by['power'] = origin
+            elif kind == 'brightness':
+                v['brightness'] = int(a['level']); by['brightness'] = origin
+            elif kind in ('text', 'picture', 'program'):
+                old = v.get('content') or {}
+                if kind == 'text':
+                    bg = a.get('background') or 'keep'
+                    if bg == 'keep':                       # the text went onto the previous text program's background
+                        bg = old.get('background') if old.get('kind') == 'text' else 'unknown'
+                    c = {'kind': 'text', 'text': a.get('text') or '', 'color': a.get('color') or 'white', 'background': bg}
+                elif kind == 'picture':
+                    c = {'kind': 'picture', 'mode': (result or {}).get('mode'), 'name': a.get('name') or Path(a.get('file', '')).name}
+                else:
+                    c = {'kind': 'program', 'name': Path(a.get('file', '')).name}
+                v['content'] = c; by['content'] = origin
+                v['power'] = True; by['power'] = origin    # an upload always wakes the display
+            else:
+                return
+            v['changed_at'] = time.time()
+            tmp = self.path.with_suffix('.tmp')
+            tmp.write_text(json.dumps(v, indent=1), encoding='utf-8')
+            tmp.replace(self.path)
+
+
 class Jobs:
     MAX_KEPT = 200                           # finished jobs kept for /api/jobs
 
     def __init__(self, verbose=True, ble_addr=None):
         self.q, self.jobs, self.verbose, self.ble_addr = queue.Queue(), {}, verbose, ble_addr
         self.last = None
+        self.state = SignState()
         threading.Thread(target=self._worker, daemon=True).start()
 
     current_origin = threading.local()     # set per request thread by the HTTP handler; 'auto-light' etc. set it by hand
@@ -93,6 +147,10 @@ class Jobs:
                     with BLE_LOCK:
                         job['result'] = self._run(job['kind'], args)
                     job['state'] = 'done'; job.pop('error', None)
+                    try:
+                        self.state.record(job['kind'], args, job['result'], job.get('origin'))
+                    except Exception as e:
+                        print('state record failed:', e)
                     break
                 except Exception as e:
                     job['state'], job['error'] = 'failed', f'{type(e).__name__}: {e}'
@@ -518,6 +576,8 @@ def make_handler(jobs: Jobs, reads, sched=None):
                 return self._json(200, {'writer': 'direct', 'sign': 'ok' if not getattr(reads, 'err', None) else reads.err,
                                         'camera': cam, 'name': config.get('sign_name'), 'queue': jobs.q.qsize(), 'last_job': jobs.last,
                                         'read_error': getattr(reads, 'err', None)})
+            if p == '/api/state':
+                return self._json(200, jobs.state.get())
             if p == '/api/jobs':
                 return self._json(200, list(jobs.jobs.values())[-30:][::-1])
             if p == '/api/schedule':
