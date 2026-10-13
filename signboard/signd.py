@@ -41,7 +41,6 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from signboard import protocol
 COLORS = ('red', 'green', 'yellow', 'blue', 'cyan', 'magenta', 'white')
 from signboard import config
 
@@ -51,7 +50,7 @@ PHOTO_DIR = config.state_file('photos')
 PHOTO_DIR.mkdir(exist_ok=True)
 
 
-BLE_LOCK = threading.Lock()      # the controller accepts one central: never read over BLE while the phone app is working
+BLE_LOCK = threading.Lock()      # the controller accepts one central: one job on the link at a time
 
 
 def _judge(photo, color):
@@ -89,7 +88,7 @@ class Jobs:
             jid = self.q.get(); job = self.jobs[jid]
             job['state'], job['started_at'] = 'running', time.time()
             args = self._real_args.pop(jid, job['args'])
-            for attempt in range(2):                 # unattended: one self-heal (force-stop + relaunch) and retry
+            for attempt in range(2):                 # unattended: one reconnect and retry
                 try:
                     with BLE_LOCK:
                         job['result'] = self._run(job['kind'], args)
@@ -337,49 +336,28 @@ class Schedule:
 
 
 class ReadCache:
-    def __init__(self, ble_addr, sign=None):
-        self.addr, self.lock, self.at, self.val, self.err = ble_addr, threading.Lock(), 0, None, None
-        self.sign = sign
+    """The controller's program, read over the shared direct link (the sign's own lock serialises it with jobs)."""
+
+    def __init__(self, sign):
+        self.sign, self.lock, self.at, self.val, self.err = sign, threading.Lock(), 0, None, None
 
     def now(self, max_age=15):
-        from signboard.ble import BleakTransport
         from signboard.server import parse_now
         with self.lock:
             if time.time() - self.at < max_age and self.val: return self.val
-            if self.sign and self.val and self.sign.want_on is False:
+            if self.val and self.sign.want_on is False:
                 return dict(self.val, power=False)         # powered off on purpose: a read session would wake it
-            if self.sign and max_age:
+            if max_age:
                 max_age = max(max_age, 60)                 # dashboards poll; each read holds the only BLE slot
-            if self.sign and time.time() - self.at < max_age and self.val: return self.val
-            if self.sign:                                   # direct mode: share the one link (its lock serialises)
-                try:
-                    proj = self.sign.read_program()['project']
-                    self.project = proj
-                    self.val = parse_now(proj); self.val['read_at'] = time.time()
-                    self.at, self.err = time.time(), None
-                except Exception as e:
-                    self.err = f'{type(e).__name__}: {e}'
-                    if not self.val: raise
-                return self.val
-            if not BLE_LOCK.acquire(timeout=0.5):        # a phone job owns the link; serve stale rather than collide
-                if self.val: return self.val
-                raise RuntimeError('sign busy (phone job running)')
-            tr = None
+            if time.time() - self.at < max_age and self.val: return self.val
             try:
-                tr = BleakTransport(self.addr, timeout=10)
-                proj = protocol.read_program(tr.request)['project']
+                proj = self.sign.read_program()['project']
                 self.project = proj
                 self.val = parse_now(proj); self.val['read_at'] = time.time()
                 self.at, self.err = time.time(), None
             except Exception as e:
                 self.err = f'{type(e).__name__}: {e}'
                 if not self.val: raise
-            finally:
-                if tr:
-                    try: tr.close()
-                    except Exception: pass
-                BLE_LOCK.release()
-                time.sleep(3)                               # give the controller time to accept the next central
             return self.val
 
 
@@ -417,11 +395,17 @@ WEB = Path(__file__).resolve().parent / 'web' / 'index.html'
 def text_args_error(a):
     """Validate a text job's arguments (API and schedules). Returns an error string or None."""
     from signboard import render
-    if len(str(a.get('text') or '')) > MAX_TEXT:
+    for k in ('text', 'color', 'outline', 'font', 'background'):
+        if a.get(k) is not None and not isinstance(a[k], str):
+            return f'{k} must be a string'
+    if isinstance(a.get('size'), bool) or not isinstance(a.get('size'), (int, str, type(None))):
+        return 'size must be a number'
+    if len(a.get('text') or '') > MAX_TEXT:
         return f'text longer than {MAX_TEXT} characters'
-    c = a.get('color')
-    if c and c.lower() not in COLORS and not re.fullmatch(r'#[0-9a-fA-F]{6}', c):
-        return f'color must be one of {sorted(COLORS)} or #rrggbb'
+    for k in ('color', 'outline'):
+        c = a.get(k)
+        if c and c.lower() not in COLORS and not re.fullmatch(r'#[0-9a-fA-F]{6}', c):
+            return f'{k} must be one of {sorted(COLORS)} or #rrggbb'
     if a.get('font') not in (None, '') and a['font'] not in render.FONTS:
         return f'font must be one of {sorted(render.FONTS)}'
     if a.get('size') not in (None, ''):
@@ -439,7 +423,18 @@ def text_args_error(a):
 
 MAX_BODY = 8 * 1024 * 1024          # largest request body (pictures, programs)
 MAX_TEXT = 500                       # characters in one text job
-ALLOWED_HOSTS = {'localhost', '127.0.0.1', '[::1]'}   # plus this host's LAN address and names, filled in by main()
+ALLOWED_HOSTS = {'localhost'}       # plus this host's names and allowed_hosts, filled in by main()
+
+
+def host_allowed(host):
+    """DNS rebinding needs a name the attacker controls, so any IP literal is safe (the LAN address can change
+    with DHCP after startup); names must be ours."""
+    import ipaddress
+    try:
+        ipaddress.ip_address(host.strip('[]'))
+        return True
+    except ValueError:
+        return host in ALLOWED_HOSTS
 
 
 def make_handler(jobs: Jobs, reads, sched=None):
@@ -453,12 +448,13 @@ def make_handler(jobs: Jobs, reads, sched=None):
         def _guard(self):
             """Refuse DNS rebinding (unknown Host) and cross-site browser requests (Origin of another site).
             Same-origin pages and non-browser clients (curl, scripts: no Origin header) pass."""
-            host = (self.headers.get('Host') or '').rsplit(':', 1)[0].lower()
-            if host and host not in ALLOWED_HOSTS:
+            netloc = (self.headers.get('Host') or '').strip().lower()
+            host = netloc if netloc.endswith(']') else re.sub(r':\d+$', '', netloc)   # a bare [::1] has no port
+            if host and not host_allowed(host):
                 self._json(421, {'error': f'unknown host {host!r}; add it to allowed_hosts in signboard.config'})
                 return False
             origin = self.headers.get('Origin')
-            if origin and origin.split('://', 1)[-1].rsplit(':', 1)[0].lower() not in ALLOWED_HOSTS:
+            if origin and origin.split('://', 1)[-1].rstrip('/').lower() != netloc:   # same origin = same host *and* port
                 self._json(403, {'error': 'cross-site request refused'})
                 return False
             return True
@@ -518,13 +514,6 @@ def make_handler(jobs: Jobs, reads, sched=None):
                 return self._json(200, {'writer': 'direct', 'sign': 'ok' if not getattr(reads, 'err', None) else reads.err,
                                         'camera': cam, 'name': config.get('sign_name'), 'queue': jobs.q.qsize(), 'last_job': jobs.last,
                                         'read_error': getattr(reads, 'err', None)})
-            if p.startswith('/files/'):                   # static files from the photo dir (lets the phone fetch a background itself)
-                f = PHOTO_DIR / re.sub(r'[^A-Za-z0-9._-]', '_', p.split('/', 2)[2])
-                if not f.is_file(): return self._json(404, {'error': 'no such file'})
-                data = f.read_bytes()
-                ctype = {'.gif': 'image/gif', '.png': 'image/png', '.jpg': 'image/jpeg'}.get(f.suffix.lower(), 'application/octet-stream')
-                self.send_response(200); self.send_header('Content-Type', ctype); self.send_header('Content-Length', str(len(data)))
-                self.end_headers(); self.wfile.write(data); return
             if p == '/api/jobs':
                 return self._json(200, list(jobs.jobs.values())[-30:][::-1])
             if p == '/api/schedule':
@@ -586,8 +575,6 @@ def make_handler(jobs: Jobs, reads, sched=None):
                 mode = opts.get('mode') or 'auto'
                 if mode != 'auto' and mode not in picture.MODES:
                     return self._json(400, {'error': f'mode must be auto or one of {list(picture.MODES)}'})
-                if not getattr(jobs, 'direct', None):
-                    return self._json(409, {'error': 'pictures need the direct BLE writer'})
                 f = PHOTO_DIR / f'picture-{int(time.time())}-{uuid.uuid4().hex[:4]}.png'; im.convert('RGB').save(f)
                 a = {'file': str(f), 'mode': mode, 'still': str(opts.get('still', '')).lower() in ('1', 'true', 'on', 'yes'),
                      'verify': str(opts.get('verify', 'true')).lower() not in ('0', 'false', 'no')}
@@ -601,6 +588,7 @@ def make_handler(jobs: Jobs, reads, sched=None):
                 return self._json(202, jobs.submit('program', {'file': str(f), 'verify': True}))
             try: a = json.loads(self._body() or b'{}')
             except json.JSONDecodeError: return self._json(400, {'error': 'bad json'})
+            if not isinstance(a, dict): return self._json(400, {'error': 'body must be a JSON object'})
             if p == '/api/look':
                 return self._json(202, jobs.submit('look', {'color': a.get('color')}))
             if p == '/api/schedule':
@@ -617,18 +605,22 @@ def make_handler(jobs: Jobs, reads, sched=None):
                 if not reads: return self._json(501, {'error': 'no BLE read bridge configured'})
                 from signboard.verify import judge_ble
                 out = {'actions': []}
+                if 'power' in a and not isinstance(a['power'], bool):
+                    return self._json(400, {'error': 'power must be true or false'})
                 if a.get('text') is not None or a.get('color'):
+                    args = {k: a[k] for k in ('text', 'color', 'background') if a.get(k)}
+                    err = text_args_error(args)
+                    if err: return self._json(400, {'error': err})
                     try: cur = reads.now(max_age=0)
                     except Exception as e: return self._json(502, {'error': f'cannot read the controller: {e}'})
                     v = judge_ble(cur, a.get('text'), a.get('color'))
                     if v['match']:
                         out['text'] = {'state': 'noop', 'holds': v['got']}
                     else:
-                        j = jobs.submit('text', {k: a[k] for k in ('text', 'color', 'background') if a.get(k)} | {'verify': True})
+                        j = jobs.submit('text', args | {'verify': True})
                         out['text'] = {'state': 'queued', 'job': j['id'], 'was': v['got']}
                         out['actions'].append(j['id'])
                 if 'power' in a:
-                    if not isinstance(a['power'], bool): return self._json(400, {'error': 'power must be true or false'})
                     j = jobs.submit('power', {'on': a['power'], 'verify': True})
                     out['power'] = {'state': 'queued', 'job': j['id']}; out['actions'].append(j['id'])
                 return self._json(200 if not out['actions'] else 202, out)
@@ -694,10 +686,7 @@ def main():
     a = ap.parse_args()
     a.ble = a.ble or config.get('sign_address')
     import socket
-    try:
-        ALLOWED_HOSTS.update({lan_ip(), socket.gethostname().lower(), socket.gethostname().lower() + '.local'})
-    except OSError:
-        pass
+    ALLOWED_HOSTS.update({socket.gethostname().lower(), socket.gethostname().lower() + '.local'})
     if a.mdns:
         ALLOWED_HOSTS.add(a.mdns.lower() + '.local')
     ALLOWED_HOSTS.update(h.lower() for h in (config.get('allowed_hosts') or []))
@@ -705,7 +694,7 @@ def main():
     jobs = Jobs(ble_addr=a.ble)
     sign = DirectSign(a.ble)
     jobs.direct = DirectBackend(sign, a.camera)
-    reads = ReadCache(a.ble, sign) if a.ble else None
+    reads = ReadCache(sign) if a.ble else None
     sched = Schedule(jobs)
     jobs.reads = reads                      # text jobs get a BLE read-back verdict (job['ble']) once the link frees
     if a.auto_light and config.get('latitude') is None:

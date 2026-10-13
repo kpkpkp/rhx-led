@@ -283,7 +283,9 @@ class DirectSign:
             done, err = b'', None
             for unacked in ((True, False) if fast else (False,)):
                 try:
-                    self.ensure()
+                    if not self.connected:               # the last attempt dropped the link: a new one needs ae01 again
+                        self.ensure()
+                        self.negotiate()
                     self.begin_upload(size)
                     done = self._stream(packets, unacked, progress)
                     err = None

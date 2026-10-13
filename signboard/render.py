@@ -13,13 +13,13 @@ from PIL import Image, ImageDraw, ImageFont
 HDR = 89
 H = 32
 FONTS = {                      # name -> candidate files (Windows, macOS, Linux); API callers can only pick a name
-    'bold': [r'C:\Windows\Fontsrialbd.ttf', '/Library/Fonts/Arial Bold.ttf', '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
+    'bold': [r'C:\Windows\Fonts\arialbd.ttf', '/Library/Fonts/Arial Bold.ttf', '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
              '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf'],
     'narrow': [r'C:\Windows\Fonts\ARIALNB.TTF', '/System/Library/Fonts/Supplemental/Arial Narrow Bold.ttf',
                '/usr/share/fonts/truetype/liberation/LiberationSansNarrow-Bold.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf'],
     'impact': [r'C:\Windows\Fonts\impact.ttf', '/System/Library/Fonts/Supplemental/Impact.ttf', '/usr/share/fonts/truetype/msttcorefonts/Impact.ttf'],
     'black': [r'C:\Windows\Fonts\seguibl.ttf', '/System/Library/Fonts/Supplemental/Arial Black.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'],
-    'verdana': [r'C:\Windows\Fontserdanab.ttf', '/System/Library/Fonts/Supplemental/Verdana Bold.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'],
+    'verdana': [r'C:\Windows\Fonts\verdanab.ttf', '/System/Library/Fonts/Supplemental/Verdana Bold.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'],
 }
 
 

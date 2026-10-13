@@ -8,7 +8,6 @@
 The BLE link is opened per request and dropped after IDLE_S, so the vendor app on the phone can still
 connect in between (the controller accepts one central at a time).
 
-  python -m signboard.server --replay captures/btsnoop-send.log        # offline demo
   python -m signboard.server --ble <sign address>                    # on a BLE-capable host
 """
 import argparse
@@ -135,19 +134,12 @@ def make_handler(bridge):
 
 def main():
     ap = argparse.ArgumentParser()
-    g = ap.add_mutually_exclusive_group(required=True)
-    g.add_argument('--ble', metavar='ADDR')
-    g.add_argument('--replay', metavar='BTSNOOP_LOG')
+    ap.add_argument('--ble', metavar='ADDR', required=True)
     ap.add_argument('--port', type=int, default=8080)
     ap.add_argument('--bind', default='0.0.0.0')
     a = ap.parse_args()
-    if a.ble:
-        from signboard.ble import BleakTransport
-        bridge = Bridge(lambda: BleakTransport(a.ble, timeout=10), f'ble:{a.ble}')
-    else:
-        from signboard.replay import fake_sign, memory_from_capture
-        req = fake_sign(memory_from_capture(a.replay))
-        bridge = Bridge(lambda: type('T', (), {'request': staticmethod(req), 'connected': True})(), f'replay:{a.replay}')
+    from signboard.ble import BleakTransport
+    bridge = Bridge(lambda: BleakTransport(a.ble, timeout=10), f'ble:{a.ble}')
     print(f'signboard bridge on {a.bind}:{a.port} via {bridge.name}', flush=True)
     ThreadingHTTPServer((a.bind, a.port), make_handler(bridge)).serve_forever()
 

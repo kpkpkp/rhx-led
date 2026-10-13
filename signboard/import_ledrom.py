@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from signboard import config, picture
 
-MODE_BY_GREY = {0: 'seven-lengthen', 1: 'low-gray', 3: 'middle-gray', 5: 'high-gray', 7: 'true-color'}
+MODE_BY_GREY = picture.MODE_BY_GREY
 
 
 def convert(ledrom: bytes) -> bytes:

@@ -153,18 +153,16 @@ GREY = {'seven-lengthen': 0, 'low-gray': 1, 'middle-gray': 3, 'high-gray': 5, 't
 
 def installed():
     """Modes whose template is installed (see docs/templates.md)."""
-    out = []
-    for m in MODES:
-        try:
-            template(m); out.append(m)
-        except FileNotFoundError:
-            pass
-    return out
+    dirs = template_dirs()
+    return [m for m in MODES if any((d / f'{m}.bin').is_file() for d in dirs)]
+
+
+MODE_BY_GREY = {g: m for m, g in GREY.items()}
 
 
 def mode_of(img_bytes):
     """Which mode a picture program was built in (from its grey depth byte; no templates needed)."""
-    return {g: m for m, g in GREY.items()}.get(img_bytes[0x37])
+    return MODE_BY_GREY.get(img_bytes[0x37])
 
 
 def decode(img_bytes):
