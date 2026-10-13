@@ -101,9 +101,8 @@ def fit(img, width, scale=1.0):
     H = max(32, (h + 31) // 32 * 32)
     pic = Image.new('RGB', (width, H))
     pic.paste(small, ((room - w) // 2, (H - h) // 2 if h < 32 else 0))
-    if H > 32:                                        # item 1 is the program's fixed background: a scrolling picture
-        return pic, Image.new('RGB', (width, 32))     # passed over a still crop of itself (2026-10-13), so keep it black
-    return pic, pic.copy()
+    top = max(0, min(H - 32, h // 3 - 16))            # the still frame: 32 rows from the upper third (faces, roofs)
+    return pic, pic.crop((0, top, width, top + 32))
 
 
 def build_fitted(pic, frame, mode, effect=None, speed=2, stop=0):
@@ -144,9 +143,11 @@ def build(img, mode, effect=None, speed=2, stop=0, still=False, report=None):
     tries = [(m, s) for m in lower for s in (1.0, 0.85, 0.72)] + \
             [(m, 0.72 * 0.85 ** k) for m in lower for k in range(1, 12)]
     for m, scale in tries:
-        pic, frame = fit(img, info(m)['width'], scale)
+        pic, crop = fit(img, info(m)['width'], scale)
         if still:
-            pic = frame
+            pic = crop
+        # item 1 is the program's fixed background: a scrolling picture passed over a still copy of itself (2026-10-13)
+        frame = pic if pic.height <= 32 else Image.new('RGB', (pic.width, 32))
         out = build_fitted(pic, frame, m, effect, speed, stop)
         if len(out) - 6 <= MAX_UPLOAD:
             if m != mode:

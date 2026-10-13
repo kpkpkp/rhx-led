@@ -179,3 +179,12 @@ def test_narrow_mode_picture_leaves_the_wrapped_columns_black():
     assert pic.crop((0, 0, 64, pic.height)).getbbox() is not None
     full, _ = picture.fit(Image.new('RGB', (300, 100), (255, 255, 255)), 128)
     assert full.crop((96, 0, 128, full.height)).getbbox() is not None      # 128-wide modes use the whole width
+
+
+@pytest.mark.skipif('high-gray' not in installed_modes(), reason='no high-gray template')
+def test_still_tall_picture_is_not_blank():
+    """2026-10-13: blanking the background item of scrolling pictures also blanked "hold still" (it used that frame)."""
+    from signboard import picture
+    im = Image.new('RGB', (128, 128), (200, 120, 40))
+    out = picture.build(im, 'high-gray', still=True)
+    assert picture.decode(out).size == (128, 32) and picture.decode(out).getbbox() is not None
