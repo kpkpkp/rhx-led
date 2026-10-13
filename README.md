@@ -28,7 +28,8 @@ so small programs are fast and big animations are slow. See `docs/PROTOCOL.md`.
 
 ## Quick start
 
-Requirements: Python 3.11+, a Bluetooth LE adapter, `pip install bleak pillow zeroconf`.
+Requirements: Python 3.11+ and a Bluetooth LE adapter. Install with `pip install .` (add `".[mdns]"` for the
+`sign.local`-style LAN name). This gives two commands: `signd` (the LAN service) and `rhx-sign` (direct control).
 
 1. **Config.** Copy `signboard.example.toml` to `~/.signboard.toml` and fill in your controller's BLE address and
    password.

@@ -13,3 +13,6 @@ photos/
 *.mp4
 LedRom
 .env
+build/
+*.egg-info/
+dist/
