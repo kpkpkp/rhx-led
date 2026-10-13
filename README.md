@@ -54,7 +54,8 @@ Requirements: Python 3.11+ and a Bluetooth LE adapter. Install with `pip install
    your backup), uploading an existing `.bin`, and `python -m signboard.selftest`. Text, pictures, sequences,
    patterns and pans need the matching template.
 
-4. `python -m signboard.selftest` runs the offline checks (more of them once templates are installed).
+4. `python -m signboard.selftest` runs the offline checks (more of them once templates are installed); `pytest`
+   (`pip install -e .[test]`) runs the full suite against an emulated controller. See CONTRIBUTING.md.
 
 **signd has no login.** It refuses requests for unknown host names and cross-site browser requests, but anyone on
 your network can use it. Run it only on a network you trust, or with `--bind 127.0.0.1`.

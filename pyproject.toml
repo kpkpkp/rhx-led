@@ -22,6 +22,7 @@ classifiers = [
 [project.optional-dependencies]
 mdns = ["zeroconf>=0.130"]             # signd --mdns
 video = ["opencv-python>=4.8", "numpy"]  # camera video analysis tools
+test = ["pytest>=7"]                    # pytest tests/ (offline); tools/gate.py, tools/hil.py
 
 [project.scripts]
 signd = "signboard.signd:main"
@@ -32,3 +33,6 @@ packages = ["signboard"]
 
 [tool.setuptools.package-data]
 signboard = ["web/*.html", "templates/README.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

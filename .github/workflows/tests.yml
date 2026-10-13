@@ -1,0 +1,32 @@
+name: tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  offline:
+    # No radio, no camera, no vendor templates here: the controller is emulated (tests/fake_controller.py) and the
+    # template tests skip. The maintainer runs tools/gate.py --hil on the real panel before merging.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.11', '3.13']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: privacy scan
+        run: python tools/scan_private.py .
+      - name: install (the build under test)
+        run: python -m pip install . pytest
+      - name: entry points
+        run: |
+          signd --help
+          rhx-sign --help
+      - name: tests against the installed package
+        working-directory: ${{ runner.temp }}
+        run: python -m pytest -q -rs -p no:cacheprovider "${{ github.workspace }}/tests"

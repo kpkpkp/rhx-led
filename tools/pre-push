@@ -1,0 +1,27 @@
+#!/bin/sh
+# Install: cp tools/pre-push .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+# Refuses to push a commit that tools/gate.py has not passed (stamp in .git/rhx-gate/<sha>.json).
+# Panel tests are required too unless RHX_GATE_NO_HIL=1 is set for this push (say why in the PR).
+# Emergency bypass: git push --no-verify (don't, for the public repo).
+dir="$(git rev-parse --git-dir)/rhx-gate"
+z=0000000000000000000000000000000000000000
+rc=0
+while read -r lref lsha rref rsha; do
+  [ "$lsha" = "$z" ] && continue                     # branch deletion
+  f="$dir/$lsha.json"
+  if [ ! -f "$f" ]; then
+    echo "pre-push: $lref ($lsha) has not been through the gate: python tools/gate.py $lsha --hil" >&2; rc=1; continue
+  fi
+  python - "$f" "${RHX_GATE_NO_HIL:-0}" <<'EOF' || rc=1
+import json, sys
+r = json.load(open(sys.argv[1], encoding='utf-8'))
+bad = [k for k, c in r['checks'].items() if not c.get('ok')]
+if bad:
+    sys.exit(f"pre-push: gate FAILED for {r['sha'][:8]}: {', '.join(bad)} (see {sys.argv[1]})")
+if not r.get('hil') and sys.argv[2] != '1':
+    sys.exit(f"pre-push: {r['sha'][:8]} passed offline but not on the panel: python tools/gate.py {r['sha'][:8]} --hil "
+             "(or RHX_GATE_NO_HIL=1 for a change that cannot affect the panel)")
+print(f"pre-push: gate ok for {r['sha'][:8]}" + (' (with panel tests)' if r.get('hil') else ' (offline only)'))
+EOF
+done
+exit $rc
