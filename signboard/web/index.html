@@ -213,6 +213,7 @@ footer{text-align:center;font-size:12px;color:var(--mut);padding-top:4px}
         </label>
         <input id="file" type="file" accept="image/gif,image/png,.gif,.png" class="sr">
         <span class="filechip" id="fileChip"><span id="fileName"></span><button type="button" id="fileClear" aria-label="Remove background image">✕</button></span>
+        <button class="btn" type="button" id="bgNone" aria-pressed="false">No background</button>
       </div>
       <div class="tiny mut" id="fileNote" style="margin-top:8px" hidden></div>
       <div class="status" id="sendStatus" role="status" aria-live="polite"></div>
@@ -552,7 +553,7 @@ const S = {
   health: null,
   jobs: [], tracked: new Map(),
   color: store.get('sign-color') || 'green',
-  file: null, fileBg: null,
+  file: null, fileBg: null, bgNone: false,
   photoName: null, photoUrl: null,
   schedule: null
 };
@@ -793,7 +794,7 @@ $('file').addEventListener('change', async () => {
   }
   try {
     const { data, w, h } = await rasterize(f);
-    S.file = f; S.fileBg = data;
+    S.file = f; S.fileBg = data; setBgNone(false);
     $('fileName').textContent = f.name; $('fileChip').classList.add('show');
     note.hidden = false;
     note.textContent = (w === PW && h === PH ? '128×32, a perfect fit.' : 'This image is ' + w + '×' + h + '; the sign is 128×32, so the preview scales it to fit.') +
@@ -802,6 +803,17 @@ $('file').addEventListener('change', async () => {
   } catch (e) {
     note.hidden = false; note.textContent = 'Couldn’t read that image: ' + e.message;
   }
+});
+function setBgNone(on) {
+  S.bgNone = on;
+  const b = $('bgNone'); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+}
+$('bgNone').addEventListener('click', () => {
+  setBgNone(!S.bgNone);
+  if (S.bgNone) { S.file = null; S.fileBg = null; $('fileChip').classList.remove('show'); }
+  const note = $('fileNote');
+  note.hidden = !S.bgNone; note.textContent = S.bgNone ? 'The sign’s background animation is cleared: text on black.' : '';
+  updatePreview();
 });
 $('fileClear').addEventListener('click', () => {
   S.file = null; S.fileBg = null;
@@ -841,6 +853,8 @@ $('sendForm').addEventListener('submit', async (e) => {
         headers: { 'Content-Type': S.file.type || 'application/octet-stream', 'X-Name': name }
       });
       body.background = (up && ((up.use && up.use.background) || up.stored || up.name)) || name;
+    } else if (S.bgNone) {
+      body.background = 'none';
     }
     showStatus(st, 'run', 'Queuing…');
     const job = await api('/api/text', { method: 'POST', json: body });
