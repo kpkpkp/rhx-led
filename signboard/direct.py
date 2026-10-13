@@ -31,6 +31,7 @@ IDLE_S = 5            # release the link quickly: the controller takes one centr
 # the dead transfer, so the panel goes blank. Refuse before sending anything.
 MAX_PROGRAM = 590 * 1024
 RESTORE_PAUSE_SCALE = 1.0   # tests set 0
+ACK_EVERY = 16              # fast uploads: every 16th packet acked (flow control); 16-64 all ~27-32 s for 300 KB (2026-10-13)
 
 
 class SignError(RuntimeError):
@@ -263,7 +264,9 @@ class DirectSign:
         self._rx.clear()
         try:
             for i, p in enumerate(packets):
-                self.write(p, response=not unacked)
+                # unacked writes have no flow control on Windows: 300 KB "went out" in 1.2 s and most of it was
+                # dropped (2026-10-13). An acked write every ACK_EVERY packets waits for the queue to drain.
+                self.write(p, response=not unacked or (i + 1) % ACK_EVERY == 0)
                 if progress:
                     progress(i + 1, len(packets))
             try:

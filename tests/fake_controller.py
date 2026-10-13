@@ -39,6 +39,7 @@ class FakeController:
         self.corrupt_if = None          # callable(stream) -> True to damage that stream (every attempt)
         self.dead_transfer = False      # stuck after an oversized upload: 78e1 only gets 81dc03 progress until dc04
         self.log = []                   # (direction, bytes) for assertions
+        self.responses = []             # response flag of every GATT write (flow-control checks)
         self.link = None
         self.uploads = 0
 
@@ -210,6 +211,7 @@ class FakeLink:
     async def write_gatt_char(self, _uuid, data, response=True):
         if not self.is_connected:
             raise LinkDropped('not connected')
+        self.ctrl.responses.append(bool(response))
         self.ctrl.write(bytes(data))
 
     async def disconnect(self):

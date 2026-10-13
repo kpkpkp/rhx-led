@@ -108,3 +108,17 @@ def test_upload_recovers_from_a_dead_transfer(ctrl):
     img = synthetic_image()
     s.upload(img)
     assert ctrl.image() == img and not ctrl.dead_transfer
+
+
+def test_fast_upload_has_flow_control(ctrl):
+    """Regression: unacked writes have no flow control on Windows; 300 KB 'went out' in 1.2 s and was mostly dropped,
+    leaving the controller in a dead transfer. Every ACK_EVERY-th packet must be an acked write."""
+    from signboard import direct
+    s = emulated_sign(ctrl, fast=True)
+    img = synthetic_image(payload=bytes(range(256)) * 200)          # ~50 KB, ~100 packets
+    s.upload(img)
+    gaps, run_ = [], 0
+    for acked in ctrl.responses:
+        run_ = 0 if acked else run_ + 1
+        gaps.append(run_)
+    assert max(gaps) < direct.ACK_EVERY and ctrl.image() == img
