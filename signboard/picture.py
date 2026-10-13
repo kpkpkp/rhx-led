@@ -94,8 +94,9 @@ def fit(img, width, scale=1.0):
     H = max(32, (h + 31) // 32 * 32)
     pic = Image.new('RGB', (width, H))
     pic.paste(small, ((width - w) // 2, (H - h) // 2 if h < 32 else 0))
-    top = max(0, min(H - 32, h // 3 - 16))            # item 1: a 32-row frame from the upper third (faces, roofs)
-    return pic, pic.crop((0, top, width, top + 32))
+    if H > 32:                                        # item 1 is the program's fixed background: a scrolling picture
+        return pic, Image.new('RGB', (width, 32))     # passed over a still crop of itself (2026-10-13), so keep it black
+    return pic, pic.copy()
 
 
 def build_fitted(pic, frame, mode, effect=None, speed=2, stop=0):
