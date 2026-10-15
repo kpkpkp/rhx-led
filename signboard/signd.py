@@ -372,7 +372,8 @@ class DirectBackend:
             if a.get('verify', True):
                 self.look(out, None, t0)
                 if 'lit' in out.get('camera', {}):
-                    out['camera']['power_ok'] = out['camera']['lit'] == bool(a['on'])
+                    lit = out['camera']['lit']            # None: the panel was not in view
+                    out['camera']['power_ok'] = None if lit is None else lit == bool(a['on'])
             return out
         if kind == 'brightness':
             self.sign.brightness(int(a['level']))

@@ -24,13 +24,66 @@ def _name(h):
     return None
 
 
+def panel_outline(im, box, k=3, need=40):
+    """Is the panel itself in view? Its dark bezel against the wall makes a sharp brightness step on each side.
+    For each row crossing the left/right edges (each column crossing top/bottom) take the largest step near the
+    expected edge, then the median per side. Saved crops (2026-10-13): panel in view 3-4 sides at 48-119; a sleeve
+    in front of the lens or the phone knocked off its aim (a blurred white surface) at most one side over 40.
+    Returns {'seen': True/False/None, 'sides': [left, right, top, bottom], 'wall': mean luma}; seen is None
+    when the wall is too dark to show an outline (night, panel off)."""
+    import statistics
+    W, H = im.size
+    xs, ys = box[0::2], box[1::2]
+    if len(box) == 8:                               # four corners: each side from its own two corners
+        cs = sorted(zip(xs, ys))
+        x0, x1 = (cs[0][0] + cs[1][0]) / 2, (cs[2][0] + cs[3][0]) / 2
+        cs = sorted(zip(ys, xs))
+        y0, y1 = (cs[0][0] + cs[1][0]) / 2, (cs[2][0] + cs[3][0]) / 2
+    else:
+        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    x0, x1, y0, y1 = x0 * W, x1 * W, y0 * H, y1 * H
+    s = 400 / max(1.0, x1 - x0)                     # work with the panel ~400 px wide
+    mx, my = (x1 - x0) * 0.2, (y1 - y0) * 0.6
+    cx, cy = max(0, int(x0 - mx)), max(0, int(y0 - my))
+    reg = im.crop((cx, cy, min(W, int(x1 + mx)), min(H, int(y1 + my)))).convert('L')
+    g = reg.resize((max(1, round(reg.width * s)), max(1, round(reg.height * s))))
+    px = g.load()
+    x0, x1, y0, y1 = (x0 - cx) * s, (x1 - cx) * s, (y0 - cy) * s, (y1 - cy) * s
+    bw, bh = x1 - x0, y1 - y0
+    sx, sy = max(int(bw * 0.08), 2 * k + 2), max(int(bh * 0.25), 2 * k + 2)
+
+    def step(vals):
+        b = 0
+        for i in range(k, len(vals) - k):
+            b = max(b, abs(sum(vals[i - k:i]) - sum(vals[i:i + k])))
+        return b / k
+
+    def side(c, rows):
+        out = []
+        if rows:
+            for y in range(int(y0 + bh * .2), int(y1 - bh * .2), 2):
+                out.append(step([px[x, y] for x in range(max(0, int(c - sx)), min(g.width, int(c + sx)))]))
+        else:
+            for x in range(int(x0 + bw * .2), int(x1 - bw * .2), 2):
+                out.append(step([px[x, y] for y in range(max(0, int(c - sy)), min(g.height, int(c + sy)))]))
+        return round(statistics.median(out)) if out else 0
+
+    sides = [side(x0, True), side(x1, True), side(y0, False), side(y1, False)]
+    wall = [px[x, y] for y in range(max(0, int(y0)), min(g.height, int(y1)))
+            for x in list(range(max(0, int(x0 - 2 * sx)), max(0, int(x0 - sx)))) + list(range(min(g.width, int(x1 + sx)), min(g.width, int(x1 + 2 * sx))))]
+    wall = round(sum(wall) / len(wall)) if wall else 0
+    seen = sum(v >= need for v in sides) >= 3
+    return {'seen': True if seen else (None if wall < 40 else False), 'sides': sides, 'wall': wall}
+
+
 def judge_photo(path, color=None, sample=4):
-    """Return {'lit', 'color_seen', 'color_ok', 'white', 'bbox', 'brightness', 'pixels', 'hist'}.
-    color_ok is None when no colour was requested. bbox is the lit region in full-frame pixel coordinates."""
+    """Return {'lit', 'color_seen', 'color_ok', 'white', 'bbox', 'brightness', 'pixels', 'hist'} (+ 'panel' with a box).
+    color_ok is None when no colour was requested. lit and color_ok are None when the panel's outline is not in view. bbox is the lit region in full-frame pixel coordinates."""
     im = Image.open(path).convert('RGB')
     W, H = im.size
     from signboard import config
     box = config.get('camera_panel_box')            # judge only the panel, not the room: a lit room, a door trim or a
+    outline = panel_outline(im, box) if box else None
     if box and len(box) == 8:                       # reference ball next to the panel fooled the hue rules (2026-10-12)
         # four corners (x, y fractions, any order around the panel): an obliquely seen panel is not a rectangle
         from PIL import ImageDraw
@@ -85,6 +138,13 @@ def judge_photo(path, color=None, sample=4):
     out = {'lit': lit, 'face_lit': None if face is None else round(face, 3), 'pixels': {'bright': bright, 'saturated': sat, 'clipped': clip, 'of': total, 'daylight': day},
            'color_seen': seen, 'hist': hist, 'white': white, 'bbox': bbox,
            'brightness': round(sum(vs) / len(vs), 2) if vs else 0.0}
+    if outline is not None:
+        out['panel'] = outline
+        if outline['seen'] is False:                # the photo shows something else: no verdict (2026-10-13: a blurred
+            out.update(lit=None, color_seen=None, white=False, bbox=None,     # white surface passed as "lit")
+                       note='panel not in view: camera moved or blocked')
+            out['color_ok'] = None
+            return out
     if color:
         color = color.lower()
         if color in ('white', 'yellow'):            # phone cameras white-balance yellow LEDs to white (s 0.0-0.1)

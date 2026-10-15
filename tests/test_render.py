@@ -160,6 +160,28 @@ def test_photo_check_small_dim_panel(tmp_path, monkeypatch):
     assert r['lit'] and r['color_ok']
 
 
+def test_photo_check_needs_the_panel_in_view(tmp_path, monkeypatch):
+    """The phone knocked off its aim saw a blurred white surface, and the judge called it 'lit' (2026-10-13)."""
+    from PIL import ImageDraw, ImageFilter
+    from signboard import config, verify
+    monkeypatch.setitem(config.CFG, 'camera_panel_box', [0.41, 0.40, 0.62, 0.48])
+    im = Image.new('RGB', (2000, 1500), (210, 210, 205))
+    ImageDraw.Draw(im).ellipse((-600, 700, 900, 2200), fill=(30, 30, 30))   # a soft dark shape, nowhere near a panel
+    im = im.filter(ImageFilter.GaussianBlur(60))
+    p = tmp_path / 'away.jpg'; im.save(p)
+    r = verify.judge_photo(p, 'green')
+    assert r['panel']['seen'] is False and r['lit'] is None and r['color_ok'] is None
+    d = ImageDraw.Draw(im := Image.new('RGB', (2000, 1500), (210, 210, 205)))
+    d.rectangle((820, 600, 1240, 720), fill=(28, 28, 28))                  # the panel back in view, off
+    im.save(p)
+    r = verify.judge_photo(p)
+    assert r['panel']['seen'] is True and r['lit'] is False
+    im = Image.new('RGB', (2000, 1500), (8, 8, 8))                          # night, room dark, panel off: can't tell
+    im.save(p)
+    r = verify.judge_photo(p)
+    assert r['panel']['seen'] is None and r['lit'] is False
+
+
 def test_saved_photo_keeps_only_the_panel(tmp_path, monkeypatch):
     from signboard import config, signd
     monkeypatch.setitem(config.CFG, 'camera_panel_box', [0.4, 0.4, 0.6, 0.5])

@@ -147,7 +147,7 @@ def main():
         p_off, v_off = photo('off')
         sign.power(True); time.sleep(1.5)
         p_on, v_on = photo('on')
-        return {'ok': not v_off['lit'] and v_on['lit'], 'off_lit': v_off['lit'], 'on_lit': v_on['lit'],
+        return {'ok': v_off['lit'] is False and v_on['lit'] is True, 'off_lit': v_off['lit'], 'on_lit': v_on['lit'],
                 'note': 'on must show the program, not the white ID screen'}
 
     def restore():
