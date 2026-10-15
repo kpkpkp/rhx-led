@@ -119,3 +119,19 @@ def test_make_transport_from_config(monkeypatch):
     monkeypatch.setitem(config.CFG, 'sign_transport', 'carrier-pigeon')
     with pytest.raises(SignError):
         direct.make_transport()
+
+
+def test_login_over_real_tcp_is_refused_by_default(ctrl):
+    """Firmware v8.05 drops the TCP connection mid-login; without sign_tcp_login no login (and no upload) is attempted."""
+    from fake_controller import FakeTcpServer
+    from signboard.transport import TcpTransport
+    srv = FakeTcpServer(ctrl)
+    s = DirectSign(transport=TcpTransport('127.0.0.1', srv.port, connect_s=2, error=SignError))
+    try:
+        with pytest.raises(SignError, match='login over TCP is disabled'):
+            s.upload(synthetic_image())
+        with pytest.raises(SignError, match='login over TCP is disabled'):
+            s.power(False)
+        assert ctrl.uploads == 0
+    finally:
+        s.close(); srv.close()

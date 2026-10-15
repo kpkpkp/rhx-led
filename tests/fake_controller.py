@@ -337,5 +337,7 @@ def emulated_tcp_sign(ctrl, **kw):
         def password(self):
             return pw
 
-    sign = EmuTcpSign(transport=TcpTransport('127.0.0.1', srv.port, connect_s=2, error=SignError), **kw)
+    t = TcpTransport('127.0.0.1', srv.port, connect_s=2, error=SignError)
+    t.allow_login = True                  # the emulator completes logins over TCP; the real v8.05 controller does not
+    sign = EmuTcpSign(transport=t, **kw)
     return sign, srv

@@ -213,6 +213,14 @@ class DirectSign:
         return b'\x88' if b'\x88' in self._rx else b'\xaa'
 
     # ---- operations ------------------------------------------------------------------------------
+    def _tcp_login_allowed(self):
+        """Logins over TCP are refused unless sign_tcp_login is set (or the transport allows them, as the emulator does):
+        on the real controller (v8.05) the 78e1 login closes the connection after 59a3, before the second answer, and
+        repeated failed logins risk a lockout (hardware test from the sign-updater session, 2026-10-14)."""
+        if self.transport is not None and not (getattr(self.transport, 'allow_login', False) or config.get('sign_tcp_login')):
+            raise SignError('login over TCP is disabled: the controller drops the connection mid-login (firmware v8.05). '
+                            'Use BLE for uploads, power and brightness, or set sign_tcp_login = true to experiment.')
+
     def login_challenge(self, password=None):
         """Login that always runs the challenge: 78e1 (upload request) -> 59a0, 89a1 -> 59a3, 89a1 -> 59a1.
         Use it for power/brightness. The 0d hello can answer a bare 88 without a challenge, and after that the
@@ -220,6 +228,7 @@ class DirectSign:
         this sequence is the one whose power-off the camera confirmed.
         78e1 starts a new upload, which (Q2C firmware) erases the program area: sent within a few seconds of an
         upload it broke the fresh program twice (2026-10-12), so wait until the controller has settled."""
+        self._tcp_login_allowed()
         settle = UPLOAD_SETTLE_S - (time.time() - self._last_upload)
         if settle > 0:
             self.log(f'waiting {settle:.1f} s for the last upload to settle')
@@ -238,6 +247,7 @@ class DirectSign:
 
     def login(self, password=None):
         """The app's login (8.0.90): 0d ff..ff 04 asks for the challenge, two 89a1 answers, then 0d ff..ff 04 -> 88."""
+        self._tcp_login_allowed()
         hello = protocol.frame(0x0d, b'\xff' * 9)
         self._rx.clear()
         self.write(hello)
@@ -267,6 +277,7 @@ class DirectSign:
         78e1 answers either a challenge (59a0: log in, then ask again) or an accept. An accept for another size means
         an upload is still pending from an earlier 78e1 (a login opens one and it survives reconnects): close it with
         dc04 and ask again. 78e1 erases the program area, so it waits UPLOAD_SETTLE_S after the previous upload."""
+        self._tcp_login_allowed()
         settle = UPLOAD_SETTLE_S - (time.time() - self._last_upload)
         if settle > 0:
             time.sleep(settle)

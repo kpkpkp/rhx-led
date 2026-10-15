@@ -16,6 +16,8 @@ DEFAULTS = {
     'sign_tcp_connect_s': 5.0,   # tcp connect timeout
     'sign_tcp_idle_s': 5.0,      # tcp: release the connection after this much idle time
     'sign_tcp_chunk': 500,       # tcp: upload write size
+    'sign_tcp_login': False,     # tcp: allow logins (upload, power, brightness). Off by default: on firmware v8.05 the
+                                 # controller closes the TCP connection right after the second challenge (59a3), 2026-10-14
     'sign_password': None,       # the controller ("card") password; set your own in the vendor app first
     'camera_serial': None,       # adb serial (or part of it) of the phone used as a camera; None = first match below
     'camera_models': [],         # adb `device:` names accepted when camera_serial is unset (e.g. "walleye");
