@@ -54,9 +54,9 @@ Status key: VERIFIED / PARTIAL / NOT YET USED / UNSUPPORTED on Q1C / UNKNOWN.
 | Power on/off now | Yes | opcodes `08`/`09` | **VERIFIED** |
 | Power schedules | 4 on/off time pairs | spec "定时开关机 4组"; opcode `0d` + 9 bytes (`timePower`; the app's "power on" is `0d ff×9`) | **NOT YET USED** natively. We send `0d ff×9 04` as the login hello, which may also be "clear timers". See unknowns. |
 | Clock set | "校时" | opcode `07` (`correctionTime`) | **NOT YET USED** |
-| WiFi AP | Own hotspot `RHX8-Q1C#…`; name/password changeable (letters and digits, at least 8) | spec; opcodes `80`, `77`, `89c0` | **NOT YET USED** (no TCP transport in this repo yet) |
-| WiFi STA (join router) / LAN | "WiFi cards can join a router, LAN comms (latest version)" | manual §核心特点; QML `setRouter`, `ConnectRHXWifi` | **UNKNOWN** for Q1C |
-| TCP port | port 3000 at 192.168.4.1 assumed in an early, unpublished experiment | our guess only; the Q2C firmware also has 192.168.47.x addresses | **UNKNOWN** | <!-- scan:ok vendor default AP addresses -->
+| WiFi AP | Own hotspot `RHX8-Q1C#…`; name/password changeable (letters and digits, at least 8) | spec; opcodes `80`, `77`, `89c0` | **VERIFIED, reads only** (2026-10-14): the hotspot is **open** (no password), channel 1, BSSID = the BLE address reversed. A client gets an address by DHCP. Reads over TCP are byte-identical to BLE; a TCP transport is on branch `tcp-transport` (uploads over TCP untested). |
+| WiFi STA (join router) / LAN | "WiFi cards can join a router, LAN comms (latest version)" | manual §核心特点; QML `setRouter`, `ConnectRHXWifi` | **NOT SUPPORTED** on Q1C firmware v8.05 (version read `83` → `d8 18 05`): the network-settings command `02 32` (frames from `LEDManager::readCmdSetting`, types 4/5/8) answers "unknown command" (`a5 00 a5 00 02 …`) after login; `ac05` is unknown too. The app's "Local Server" mode (the app listens on TCP 36998 for cards) and "Net" search find nothing. |
+| TCP port | port 3000 at 192.168.4.1 assumed in an early, unpublished experiment | our guess only; the Q2C firmware also has 192.168.47.x addresses | **VERIFIED**: the card is 192.168.47.1, TCP **25622**. One client at a time (a second connects but gets no replies). An open TCP connection blocks BLE reads; BLE does not block TCP. `ac01` reads accept up to 4000 B per request. | <!-- scan:ok vendor default AP addresses -->
 | Cloud server | 4G cards and network cards; "WiFi cards remote cloud (latest)" | manual ch. 7; QML `useRHXServer`, `setCloudServerIP` | **UNKNOWN**, probably not on Q1C |
 | BLE | GATT write/notify, one central | our `direct.py` | **VERIFIED** (production path) |
 | USB drive | "小卡不支持优盘" (small cards: no USB) | spec item 29; no port | **UNSUPPORTED** (vendor `C:\LedRom` export still useful as a template source) |
@@ -69,6 +69,7 @@ Status key: VERIFIED / PARTIAL / NOT YET USED / UNSUPPORTED on Q1C / UNKNOWN.
 | Effects (ShowWay) | 25 in the QML list (0 shinning … 24 Laser Right), plus 25 used by GIF exports; spec claims 59 including animated-text effects | QML `0018a297.bin`; spec | **VERIFIED**: 1, 17–20, 25. Others are untested. |
 | Borders ("花边") | 200+ programme and area borders, speed | spec "炫酷花边"; QML `Lace`, `LaceSpeed` | **NOT YET USED** |
 | Backgrounds | 150+ animated backgrounds, custom images or animation | spec | **VERIFIED** (custom 7-colour background frames, `render.set_background`) |
+| Layers in grey modes | Program background + picture | vendor exports; camera tests 2026-10-14 | **VERIFIED** (middle gray): the background item (block at 0x92, frame count at 0x9c) shows alone as a still picture; a frame count above 1 does not animate it (garbled with frame-major and plane-major rows). The foreground picture carries all motion (still, pans, sequences) and its black is transparent over the background. Layered motion = still background + moving foreground (`sequence.build(..., background=img)`). |
 | Tables | Excel-like table area | manual §4.10 | **NOT YET USED** (low value) |
 | Firmware update | "升级控制卡", "特定固件升级"; cloud OTA for 4G cards | manual; opcode `70e1` + `02 41` | **NOT YET USED**. High risk. |
 | Factory init | Normal init (`98a5`, `1b`); "super init" (power-cycle, then reconnect within 1 min) resets everything, SSID gets "AP1" | manual Q10 | **NOT YET USED**. Destructive. |
@@ -95,7 +96,7 @@ Status key: VERIFIED / PARTIAL / NOT YET USED / UNSUPPORTED on Q1C / UNKNOWN.
 - Does sending the `0d ff×9 04` login hello (the app's "power on" = `timePower` with all slots 0xff) clear stored power timers?
 - The format of the `07` time and of the `0c`/`0d` schedule payloads, and whether they need a login.
 - Is there an RTC that survives power loss? (The coin cell suggests so, but this is unverified.)
-- Does Q1C firmware support STA mode, LAN discovery (`02 24` UDP search) or cloud? What are the TCP port and AP IP (192.168.4.1 or 192.168.47.1)? <!-- scan:ok vendor default AP addresses -->
+- ~~Does Q1C firmware support STA mode? TCP port and AP IP?~~ Answered 2026-10-14: no STA (`02` unknown); AP 192.168.47.1, TCP 25622. Cloud and `02 24` UDP search are presumably absent too. <!-- scan:ok vendor default AP addresses -->
 - The meaning of the `ac05` supported-functions bitmap.
 - What does the on-board button do (test pattern, next program, init)?
 - Why does the card table give 32×1024 for mode 1 while the spec gives 32×768? Is this the "background + colourful text" penalty?
