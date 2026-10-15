@@ -885,7 +885,7 @@ def main():
     jobs = Jobs(ble_addr=a.ble)
     sign = DirectSign(a.ble)
     jobs.direct = DirectBackend(sign, a.camera)
-    reads = ReadCache(sign) if a.ble else None
+    reads = ReadCache(sign) if (a.ble or sign.transport) else None
     sched = Schedule(jobs)
     jobs.reads = reads                      # text jobs get a BLE read-back verdict (job['ble']) once the link frees
     if a.auto_light and config.get('latitude') is None:

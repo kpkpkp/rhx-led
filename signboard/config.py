@@ -10,6 +10,12 @@ from pathlib import Path
 
 DEFAULTS = {
     'sign_address': None,        # BLE address of the RHX controller, e.g. "AA:BB:CC:DD:EE:FF"  # scan:ok
+    'sign_transport': 'ble',     # "ble" or "tcp" (the controller's own Wi-Fi hotspot)
+    'sign_host': '192.168.47.1', # tcp: the controller's address on its hotspot  # scan:ok
+    'sign_port': 25622,          # tcp port
+    'sign_tcp_connect_s': 5.0,   # tcp connect timeout
+    'sign_tcp_idle_s': 5.0,      # tcp: release the connection after this much idle time
+    'sign_tcp_chunk': 500,       # tcp: upload write size
     'sign_password': None,       # the controller ("card") password; set your own in the vendor app first
     'camera_serial': None,       # adb serial (or part of it) of the phone used as a camera; None = first match below
     'camera_models': [],         # adb `device:` names accepted when camera_serial is unset (e.g. "walleye");
@@ -39,7 +45,7 @@ def _load():
     for k, v in DEFAULTS.items():
         env = os.environ.get('SIGNBOARD_' + k.upper())
         if env is not None:
-            cfg[k] = ([float(x) for x in env.split(',')] if k == 'camera_panel_box' else float(env) if k in ('latitude', 'longitude') else int(env) if k == 'max_brightness'
+            cfg[k] = ([float(x) for x in env.split(',')] if k == 'camera_panel_box' else float(env) if k in ('latitude', 'longitude') else int(env) if k in ('max_brightness', 'sign_port', 'sign_tcp_chunk') else float(env) if k in ('sign_tcp_connect_s', 'sign_tcp_idle_s')
                       else env.strip().lower() not in ('0', 'false', 'no', 'off') if k == 'camera'
                       else [x.strip() for x in env.split(',') if x.strip()] if k in ('camera_models', 'allowed_hosts') else env)
     return cfg

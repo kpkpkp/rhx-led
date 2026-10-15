@@ -38,9 +38,31 @@ class SignError(RuntimeError):
     pass
 
 
+def make_transport():
+    """None for BLE, or a TcpTransport when config sign_transport = "tcp" (sign_host, sign_port, sign_tcp_connect_s, sign_tcp_chunk)."""
+    kind = str(config.get('sign_transport') or 'ble').strip().lower()
+    if kind == 'ble':
+        return None
+    if kind != 'tcp':
+        raise SignError(f'sign_transport must be "ble" or "tcp", not {kind!r}')
+    from signboard.transport import TcpTransport, DEFAULT_HOST, DEFAULT_PORT
+    return TcpTransport(config.get('sign_host') or DEFAULT_HOST, config.get('sign_port') or DEFAULT_PORT,
+                        config.get('sign_tcp_connect_s') or 5.0, config.get('sign_tcp_chunk') or 500, error=SignError)
+
+
 class DirectSign:
-    def __init__(self, addr=ADDR, verbose=False, idle_s=IDLE_S):
-        self.addr, self.verbose, self.idle_s = addr or config.require('sign_address', "The RHX controller's BLE address (a bleak or nRF Connect scan shows it)."), verbose, idle_s
+    def __init__(self, addr=ADDR, verbose=False, idle_s=IDLE_S, transport=None):
+        # transport: None = BLE (this class), or a TcpTransport (config sign_transport = "tcp"). All protocol logic is shared.
+        if transport is None:
+            transport = make_transport()
+        self.transport = transport
+        if transport is None:
+            addr = addr or config.require('sign_address', "The RHX controller's BLE address (a bleak or nRF Connect scan shows it).")
+        else:
+            addr = f'{transport.host}:{transport.port}'
+            if idle_s == IDLE_S:
+                idle_s = float(config.get('sign_tcp_idle_s') or IDLE_S)
+        self.addr, self.verbose, self.idle_s = addr, verbose, idle_s
         self.lock = threading.RLock()
         self._loop = asyncio.new_event_loop()
         threading.Thread(target=self._loop.run_forever, daemon=True, name='ble-loop').start()
@@ -69,6 +91,9 @@ class DirectSign:
             self.log('<<', bytes(data[:48]).hex() + ('…' if len(data) > 48 else ''))
         self._rx_event.set()
 
+    def _on_data(self, data):
+        self._on_notify(None, data)
+
     async def _connect(self):
         from bleak import BleakClient, BleakScanner
         dev = await BleakScanner.find_device_by_address(self.addr, timeout=10)
@@ -82,14 +107,34 @@ class DirectSign:
 
     @property
     def connected(self):
+        if self.transport is not None:
+            return self.transport.connected
         return bool(self._client and self._client.is_connected)
+
+    def _open_link(self):
+        if self.transport is None:
+            self._run(self._connect(), timeout=40)
+        else:
+            self._rx_event = asyncio.Event()
+            self.transport.connect(self._on_data)
+
+    def _drop_link(self, timeout=10):
+        if self.transport is not None:
+            self.transport.close()
+            return
+        if self._client:
+            try:
+                self._run(self._client.disconnect(), timeout=timeout)
+            except Exception:
+                pass
+            self._client = None
 
     def ensure(self):
         if not self.connected:
             t = time.time()
             for attempt in range(3):
                 try:
-                    self._run(self._connect(), timeout=40)
+                    self._open_link()
                     break
                 except Exception as e:
                     self.log('connect failed:', e)
@@ -102,17 +147,13 @@ class DirectSign:
 
     def close(self):
         with self.lock:
-            if self._client:
-                try:
-                    self._run(self._client.disconnect(), timeout=10)
-                except Exception:
-                    pass
-                self._client = None
+            if self.transport is not None or self._client:
+                self._drop_link()
 
     def _reaper(self):
         while True:
             time.sleep(2)
-            if self._client and time.time() - self._last_use > self.idle_s and self.lock.acquire(blocking=False):
+            if (self.transport is not None or self._client) and time.time() - self._last_use > self.idle_s and self.lock.acquire(blocking=False):
                 try:
                     if time.time() - self._last_use > self.idle_s:
                         self.log('idle: releasing the link')
@@ -127,7 +168,10 @@ class DirectSign:
     def write(self, data: bytes, response=True):
         if self.verbose:
             self.log('>>', data[:48].hex() + ('…' if len(data) > 48 else ''))
-        self._run(self._client.write_gatt_char(WRITE_UUID, data, response=response))
+        if self.transport is not None:
+            self.transport.write(data)
+        else:
+            self._run(self._client.write_gatt_char(WRITE_UUID, data, response=response))
         self._last_use = time.time()
 
     def wait_for(self, pred, timeout=8.0):
@@ -211,7 +255,10 @@ class DirectSign:
             raise SignError(f'login not confirmed: {r.hex()}')
 
     def negotiate(self):
-        """ae01: ask for 500-byte packets. The app does this first on every connection."""
+        """ae01: ask for 500-byte packets. The app does this first on every connection.
+        Skipped on TCP (no MTU to negotiate; the stream is simply sent in sign_tcp_chunk-sized writes)."""
+        if self.transport is not None:
+            return (self.transport.chunk, self.transport.chunk)
         r = self.expect(protocol.frame(0xae, b'\x01\x01\xf4\x01\xf4', tail04=False), b'\xa5\x00\xa5\x00\xae\x01\x88', 5)
         return struct.unpack_from('>HH', r, 8)          # (500, 500) on BLE 4.2+ hosts; an old BLE 4.0 host got (20, 20)
 
@@ -251,6 +298,8 @@ class DirectSign:
     def _fast_link(self):
         """Ask Windows for a throughput-optimised connection (Win11 WinRT). 43 KB went from 6.3 s to ~2.7 s
         together with unacked writes (2026-10-12). Returns False where unavailable (other OSes, older bleak)."""
+        if self.transport is not None:
+            return True                          # TCP: no per-write ack and no MTU limit; NODELAY is set at connect
         try:
             from winrt.windows.devices.bluetooth import BluetoothLEPreferredConnectionParameters as P
             self._client._backend._requester.request_preferred_connection_parameters(P.throughput_optimized)
@@ -289,13 +338,16 @@ class DirectSign:
         controller always writes from address 0 (tested 2026-10-12), so there are no partial uploads."""
         from signboard import image
         packets, size = image.wire_stream(img)
+        if self.transport is not None and self.transport.chunk != 500:
+            blob = b''.join(packets)
+            packets = [blob[i:i + self.transport.chunk] for i in range(0, len(blob), self.transport.chunk)]
         if size > MAX_PROGRAM:
             raise SignError(f'program is {size // 1024} KB; the controller holds about {MAX_PROGRAM // 1024} KB '
                             '(fewer pictures, a shallower work mode, or a smaller picture). Nothing was sent.')
         with self.lock:
             self.ensure()
             t0 = time.time()
-            fast = fast and self._fast_link() and (getattr(self._client, 'mtu_size', 23) - 3) >= max(map(len, packets))
+            fast = fast and self._fast_link() and (self.transport is not None or (getattr(self._client, 'mtu_size', 23) - 3) >= max(map(len, packets)))
             self.negotiate()
             done, err = b'', None
             for unacked in ((True, False) if fast else (False,)):
@@ -366,12 +418,7 @@ class DirectSign:
         """The 78e1 login leaves an upload request pending; on the same link the controller then answers everything
         (even ae01) with that stale 81dc02 and uploads stall. A reconnect clears it, so drop the link."""
         time.sleep(0.3)
-        if self._client:
-            try:
-                self._run(self._client.disconnect(), timeout=10)
-            except Exception:
-                pass
-            self._client = None
+        self._drop_link()
 
     def _reassert_off(self):
         if self.want_on is False:
@@ -394,11 +441,15 @@ class DirectSign:
                 raise SignError(f'brightness {level} rejected: {r.hex()}')
             return True
 
+    def _read_chunk(self):
+        """Bytes per ac01 read: BLE keeps protocol.CHUNK; TCP takes 4000 (checked 2026-10-14, ~100x faster than 262)."""
+        return getattr(self.transport, 'read_chunk', None)
+
     def read_program(self):
         with self.lock:
             self.ensure()
             try:
-                return protocol.read_program(self.request)
+                return protocol.read_program(self.request, self._read_chunk())
             finally:
                 self._reassert_off()
 
@@ -408,11 +459,11 @@ class DirectSign:
             self.ensure()
             self.request(protocol.open_session(), protocol.ACK_LEN)
             try:
-                head = protocol.read_memory(self.request, 0, 0x76)      # sign address == image offset
+                head = protocol.read_memory(self.request, 0, 0x76, self._read_chunk())      # sign address == image offset
                 total = struct.unpack_from('>I', head, 0x11)[0]
                 if not 0x76 <= total <= 1024 * 1024:             # erased flash reads ff..: don't loop over 4 GB
                     raise SignError(f'no valid program in the sign (length field {total:#x}): upload one first')
-                body = protocol.read_memory(self.request, 4, total)
+                body = protocol.read_memory(self.request, 4, total, self._read_chunk())
             finally:
                 self.request(protocol.close_session(), protocol.ACK_LEN)
                 self._reassert_off()

@@ -54,23 +54,24 @@ def parse_read_reply(buf: bytes, addr: int, length: int) -> bytes:
     return data
 
 
-def read_memory(request, addr: int, length: int) -> bytes:
-    """request(frame, need_bytes) -> reply bytes. Chunks long reads."""
+def read_memory(request, addr: int, length: int, chunk: int = None) -> bytes:
+    """request(frame, need_bytes) -> reply bytes. Chunks long reads (CHUNK by default; TCP can take much more)."""
     out = b''
-    for off in range(0, length, CHUNK):
-        n = min(CHUNK, length - off)
+    chunk = chunk or CHUNK
+    for off in range(0, length, chunk):
+        n = min(chunk, length - off)
         reply = request(read_request(addr + off, n), read_reply_size(n))
         out += parse_read_reply(reply, addr + off, n)
     return out
 
 
-def read_program(request) -> dict:
+def read_program(request, chunk: int = None) -> dict:
     """Read the project JSON out of the sign. Returns {'raw': bytes, 'project': dict}."""
     request(open_session(), ACK_LEN)
     try:
-        ptr = struct.unpack('>I', read_memory(request, PROGRAM_PTR_ADDR, 4))[0]
-        n = struct.unpack('>I', read_memory(request, ptr, 6)[2:6])[0]
-        raw = read_memory(request, ptr, 6 + n + 6)       # app over-reads the tail slightly
+        ptr = struct.unpack('>I', read_memory(request, PROGRAM_PTR_ADDR, 4, chunk))[0]
+        n = struct.unpack('>I', read_memory(request, ptr, 6, chunk)[2:6])[0]
+        raw = read_memory(request, ptr, 6 + n + 6, chunk)       # app over-reads the tail slightly
     finally:
         request(close_session(), ACK_LEN)
     start = raw.index(b'{')

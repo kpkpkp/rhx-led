@@ -238,3 +238,104 @@ def emulated_sign(ctrl, fast=False, **kw):
             return pw
 
     return EmuSign('EMU', **kw)
+
+
+class FakeTcpServer:
+    """The emulator behind a real TCP socket on 127.0.0.1 (no real network). One FakeController, one connection at a time
+    is served per handler thread. Knobs: split=N (send replies in N-byte segments), merge=True (hold replies and send
+    them together after `merge_ms`), refuse=N (close the first N connections at once)."""
+
+    def __init__(self, ctrl, split=0, merge=False, merge_ms=30, refuse=0):
+        import socket
+        import socketserver
+        import threading
+        self.ctrl, self.split, self.merge, self.merge_ms, self.refuse = ctrl, split, merge, merge_ms, refuse
+        self.connections = 0
+        outer = self
+
+        class Handler(socketserver.BaseRequestHandler):
+            def handle(self):
+                outer.connections += 1
+                if outer.refuse > 0:
+                    outer.refuse -= 1
+                    return
+                link = _TcpLink(self.request, outer)
+                ctrl.attach(link)
+                ctrl.negotiated = True      # model: TCP has no MTU to negotiate; any write size is accepted
+                try:
+                    while True:
+                        d = self.request.recv(4096)
+                        if not d:
+                            break
+                        ctrl.write(d)
+                except OSError:
+                    pass
+                finally:
+                    link.flush()
+
+        class Srv(socketserver.ThreadingTCPServer):
+            allow_reuse_address = True
+            daemon_threads = True
+
+        self.server = Srv(('127.0.0.1', 0), Handler)
+        self.port = self.server.server_address[1]
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+
+class _TcpLink:
+    def __init__(self, sock, srv):
+        import threading
+        self.sock, self.srv, self.buf, self.lock, self.timer = sock, srv, bytearray(), threading.Lock(), None
+        self.is_connected = True
+
+    def _raw(self, data):
+        try:
+            if self.srv.split:
+                for i in range(0, len(data), self.srv.split):
+                    self.sock.sendall(data[i:i + self.srv.split])
+                    import time
+                    time.sleep(0.0005)
+            else:
+                self.sock.sendall(data)
+        except OSError:
+            pass
+
+    def flush(self):
+        with self.lock:
+            data, self.buf = bytes(self.buf), bytearray()
+        if data:
+            self._raw(data)
+
+    def notify(self, data):
+        if not self.srv.merge:
+            self._raw(bytes(data))
+            return
+        import threading
+        with self.lock:
+            self.buf.extend(data)
+            if self.timer is None:
+                self.timer = threading.Timer(self.srv.merge_ms / 1000, self._fire)
+                self.timer.start()
+
+    def _fire(self):
+        self.timer = None
+        self.flush()
+
+
+def emulated_tcp_sign(ctrl, **kw):
+    """A DirectSign using TcpTransport against a FakeTcpServer. Returns (sign, server); call server.close() when done."""
+    from signboard.direct import DirectSign, SignError
+    from signboard.transport import TcpTransport
+    pw = kw.pop('password', 'testpass1')
+    srv = FakeTcpServer(ctrl, **{k: kw.pop(k) for k in ('split', 'merge', 'merge_ms', 'refuse') if k in kw})
+
+    class EmuTcpSign(DirectSign):
+        def password(self):
+            return pw
+
+    sign = EmuTcpSign(transport=TcpTransport('127.0.0.1', srv.port, connect_s=2, error=SignError), **kw)
+    return sign, srv
